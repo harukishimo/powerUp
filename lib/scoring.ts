@@ -132,7 +132,10 @@ export function calculateScores(input: DailyLogInput) {
   const recordedPoints = recorded.reduce((total, [value]) => total + (value ?? 0), 0);
   const recordedMax = recorded.reduce((total, [, max]) => total + max, 0);
   const recordingRate = recordedMax === 0 ? 0 : round((recordedMax / 100) * 100);
-  const total = recordedMax === 0 ? null : round((recordedPoints / recordedMax) * 100);
+  // Keep the total on the fixed 100-point scale. Missing categories are not
+  // treated as recorded zeroes, but they also must not inflate a partial log
+  // by normalizing it from (for example) 33/50 to 66/100.
+  const total = recordedMax === 0 ? null : recordedPoints;
 
   return {
     sleep,

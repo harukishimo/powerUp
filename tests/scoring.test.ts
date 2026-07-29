@@ -54,7 +54,7 @@ describe("scoring", () => {
     expect(result.sleep).toBeNull();
   });
 
-  it("normalizes partial logs and caps the complete score at 100", () => {
+  it("keeps partial logs on the fixed 100-point scale", () => {
     const input = emptyLog();
     input.sleep.pixelWatchScore = 82;
     input.phone.entertainmentMinutes = 60;
@@ -64,8 +64,20 @@ describe("scoring", () => {
     input.result.focusMinutes = 90;
     input.result.reflectionRating = 5;
     const partial = calculateScores(input);
-    expect(partial.total).toBeLessThanOrEqual(100);
+    expect(partial.total).toBe(61);
     expect(partial.recordingRate).toBe(70);
+  });
+
+  it("does not inflate a sleep-only score to a 100-point percentage", () => {
+    const input = emptyLog();
+    input.sleep.pixelWatchScore = 66;
+
+    const scores = calculateScores(input);
+
+    expect(scores.sleep).toBe(33);
+    expect(scores.total).toBe(33);
+    expect(scores.recordingRate).toBe(50);
+    expect(scores.provisional).toBe(true);
   });
 
   it("scores meals, snacks, and timing within their fixed caps", () => {
