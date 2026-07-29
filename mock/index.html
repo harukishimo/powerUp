@@ -1,0 +1,807 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="powerUp - 生産性が上がる条件を発見するコンディションアプリのモック">
+  <title>powerUp | Daily condition</title>
+  <style>
+    :root {
+      --ink: #17233f;
+      --muted: #71809f;
+      --line: #e6eaf2;
+      --paper: #fbfcff;
+      --card: #ffffff;
+      --blue: #4b64f2;
+      --blue-dark: #3147cd;
+      --cyan: #30b8c5;
+      --mint: #4fc79d;
+      --mint-pale: #e7f8f1;
+      --lavender: #eeefff;
+      --peach: #fff0e4;
+      --yellow: #f1b845;
+      --danger: #e66f61;
+      --shadow: 0 18px 44px rgba(37, 54, 95, .08);
+      --radius-lg: 24px;
+      --radius-md: 16px;
+      --radius-sm: 10px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: #f4f6fb;
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif;
+      line-height: 1.55;
+    }
+
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+      outline: 3px solid rgba(75, 100, 242, .28);
+      outline-offset: 2px;
+    }
+
+    .shell { min-height: 100vh; display: grid; grid-template-columns: 240px minmax(0, 1fr); }
+    .sidebar {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      padding: 28px 20px;
+      background: #16213f;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+    }
+    .brand { display: flex; align-items: center; gap: 11px; padding: 0 10px; }
+    .brand-mark {
+      width: 34px;
+      height: 34px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      font-size: 18px;
+      font-weight: 800;
+      background: linear-gradient(135deg, #6b7bff, #3fc9b0);
+      box-shadow: 0 8px 18px rgba(50, 210, 183, .18);
+    }
+    .brand-name { font-size: 20px; font-weight: 800; letter-spacing: -.04em; }
+    .brand-sub { margin-top: 2px; color: #99a6c7; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
+    .nav { margin-top: 46px; display: grid; gap: 8px; }
+    .nav-item {
+      width: 100%;
+      border: 0;
+      border-radius: 12px;
+      padding: 12px 13px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: #a9b3cd;
+      background: transparent;
+      text-align: left;
+      transition: .2s ease;
+    }
+    .nav-item:hover, .nav-item.active { color: #fff; background: rgba(255, 255, 255, .11); }
+    .nav-icon { width: 20px; text-align: center; font-size: 17px; }
+    .sidebar-footer { margin-top: auto; padding: 16px 12px 6px; color: #8f9bbd; font-size: 12px; }
+    .profile { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; color: #e8ebf8; }
+    .avatar { width: 31px; height: 31px; border-radius: 50%; display: grid; place-items: center; background: #d8e2ff; color: #394db8; font-weight: 800; font-size: 12px; }
+
+    .main { min-width: 0; padding: 32px 42px 56px; }
+    .topbar { max-width: 1210px; margin: 0 auto 24px; display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+    .eyebrow { color: var(--blue); font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    h1, h2, h3, p { margin: 0; }
+    h1 { margin-top: 4px; font-size: clamp(27px, 4vw, 38px); line-height: 1.15; letter-spacing: -.055em; }
+    .topbar-copy { color: var(--muted); margin-top: 8px; font-size: 14px; }
+    .date-pill { display: flex; align-items: center; gap: 9px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); background: rgba(255,255,255,.72); font-size: 12px; white-space: nowrap; }
+    .date-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--mint); box-shadow: 0 0 0 4px var(--mint-pale); }
+    .content { max-width: 1210px; margin: 0 auto; }
+    .hero-grid { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(280px, .55fr); gap: 20px; }
+    .card { border: 1px solid rgba(224, 229, 241, .85); border-radius: var(--radius-lg); background: var(--card); box-shadow: var(--shadow); }
+    .score-hero { position: relative; overflow: hidden; min-height: 270px; padding: 28px; background: linear-gradient(120deg, #f7f8ff 0%, #fff 58%, #e9fbf4 100%); }
+    .score-hero::after { content: ""; position: absolute; width: 240px; height: 240px; right: -50px; bottom: -80px; border: 38px solid rgba(79,199,157,.11); border-radius: 50%; }
+    .hero-content { position: relative; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 26px; height: 100%; }
+    .hero-title { font-size: 14px; color: var(--muted); }
+    .hero-headline { max-width: 390px; margin-top: 10px; font-size: clamp(22px, 3vw, 30px); font-weight: 800; line-height: 1.25; letter-spacing: -.045em; }
+    .hero-note { max-width: 410px; margin-top: 12px; color: var(--muted); font-size: 13px; }
+    .score-ring { --score-deg: 295deg; flex: 0 0 166px; width: 166px; height: 166px; border-radius: 50%; display: grid; place-items: center; background: conic-gradient(var(--blue) var(--score-deg), #dfe5f5 0); box-shadow: 0 12px 26px rgba(75, 100, 242, .18); }
+    .score-ring-inner { width: 130px; height: 130px; border-radius: 50%; display: grid; place-items: center; align-content: center; background: #fff; }
+    .score-number { font-size: 46px; line-height: 1; font-weight: 850; letter-spacing: -.08em; }
+    .score-caption { margin-top: 7px; color: var(--muted); font-size: 11px; font-weight: 700; }
+    .spark-card { padding: 25px; background: #17233f; color: #fff; }
+    .spark-card .eyebrow { color: #9caaff; }
+    .spark-card h2 { margin-top: 8px; font-size: 20px; letter-spacing: -.04em; }
+    .spark-sub { margin-top: 8px; color: #aeb9d3; font-size: 12px; }
+    .sparkline { height: 78px; margin-top: 26px; display: flex; align-items: end; gap: 9px; }
+    .spark-bar { position: relative; flex: 1; min-width: 10px; border-radius: 5px 5px 2px 2px; background: linear-gradient(180deg, #7d8aff, #51cbb5); opacity: .85; }
+    .spark-bar.current { background: linear-gradient(180deg, #fff, #91f1ca); opacity: 1; }
+    .spark-labels { display: flex; justify-content: space-between; margin-top: 9px; color: #8f9bbd; font-size: 10px; }
+    .section-head { display: flex; align-items: center; justify-content: space-between; gap: 15px; margin: 34px 0 14px; }
+    .section-title { font-size: 18px; letter-spacing: -.04em; }
+    .section-caption { color: var(--muted); font-size: 12px; }
+    .metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+    .metric-card { min-height: 178px; padding: 19px; box-shadow: 0 9px 26px rgba(37, 54, 95, .045); }
+    .metric-top { display: flex; align-items: center; justify-content: space-between; gap: 9px; }
+    .metric-label { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; font-weight: 700; }
+    .metric-icon { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 9px; font-size: 14px; }
+    .icon-sleep { color: #5364da; background: var(--lavender); }
+    .icon-food { color: #bc7540; background: var(--peach); }
+    .icon-phone { color: #269c82; background: var(--mint-pale); }
+    .icon-result { color: #b38016; background: #fff7db; }
+    .metric-points { color: var(--muted); font-size: 12px; font-weight: 700; }
+    .metric-value { margin-top: 16px; font-size: 30px; font-weight: 850; line-height: 1; letter-spacing: -.07em; }
+    .metric-value small { color: var(--muted); font-size: 14px; font-weight: 700; letter-spacing: 0; }
+    .meter { height: 7px; margin-top: 15px; overflow: hidden; border-radius: 99px; background: #edf0f6; }
+    .meter-fill { width: 0; height: 100%; border-radius: inherit; background: var(--blue); transition: width .3s ease; }
+    .meter-food { background: #eea56b; }
+    .meter-phone { background: var(--mint); }
+    .meter-result { background: var(--yellow); }
+    .metric-help { margin-top: 9px; color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .form-row { display: flex; align-items: center; gap: 7px; margin-top: 12px; }
+    input[type="number"], input[type="text"], select, textarea { width: 100%; border: 1px solid var(--line); border-radius: 9px; color: var(--ink); background: #fff; padding: 9px 10px; font-size: 12px; }
+    input[type="number"] { max-width: 92px; }
+    textarea { min-height: 76px; resize: vertical; line-height: 1.55; }
+    .mini-button, .primary-button, .ghost-button { border: 0; border-radius: 9px; padding: 9px 11px; font-size: 11px; font-weight: 800; transition: .2s ease; }
+    .mini-button { color: #fff; background: var(--blue); }
+    .mini-button:hover, .primary-button:hover { background: var(--blue-dark); transform: translateY(-1px); }
+    .ghost-button { color: var(--blue); background: var(--lavender); }
+    .primary-button { color: #fff; background: var(--blue); }
+    .workspace { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(300px, .85fr); gap: 20px; align-items: start; }
+    .panel { padding: 23px; }
+    .panel-title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 17px; }
+    .panel-title { font-size: 16px; letter-spacing: -.035em; }
+    .panel-link { border: 0; color: var(--blue); background: transparent; font-size: 11px; font-weight: 800; }
+    .meal-list { display: grid; gap: 10px; }
+    .meal-row { display: grid; grid-template-columns: 94px minmax(0, 1fr) auto; align-items: center; gap: 13px; padding: 13px 0; border-top: 1px solid #eef0f5; }
+    .meal-row:first-child { border-top: 0; padding-top: 0; }
+    .meal-time { color: var(--muted); font-size: 11px; font-weight: 700; }
+    .meal-main { min-width: 0; }
+    .meal-name { font-size: 13px; font-weight: 800; }
+    .meal-detail { margin-top: 2px; color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .meal-score { min-width: 49px; padding: 6px 8px; border-radius: 9px; color: #2d856e; background: var(--mint-pale); font-size: 11px; font-weight: 850; text-align: center; }
+    .meal-score.warn { color: #ae6c1f; background: #fff4dc; }
+    .meal-score.low { color: #ae5349; background: #fff0ed; }
+    .ai-card { padding: 22px; color: #fff; background: linear-gradient(145deg, #5869ed, #384dca); box-shadow: 0 16px 32px rgba(58, 77, 202, .2); }
+    .ai-badge { display: inline-flex; align-items: center; gap: 7px; padding: 6px 9px; border-radius: 99px; color: #dce1ff; background: rgba(255,255,255,.14); font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+    .ai-card h2 { margin-top: 14px; font-size: 21px; line-height: 1.3; letter-spacing: -.05em; }
+    .ai-card p { margin-top: 9px; color: #dce1ff; font-size: 12px; }
+    .ai-action { margin-top: 21px; padding: 13px; border-radius: 13px; color: var(--ink); background: rgba(255,255,255,.93); font-size: 12px; }
+    .ai-action strong { display: block; margin-bottom: 4px; font-size: 11px; color: var(--blue-dark); }
+    .log-card { margin-top: 20px; }
+    .log-item { display: flex; gap: 12px; padding: 13px 0; border-top: 1px solid #eef0f5; }
+    .log-dot { width: 10px; height: 10px; flex: 0 0 10px; margin-top: 7px; border-radius: 50%; background: var(--mint); box-shadow: 0 0 0 5px var(--mint-pale); }
+    .log-dot.blue { background: var(--blue); box-shadow: 0 0 0 5px var(--lavender); }
+    .log-title { font-size: 12px; font-weight: 800; }
+    .log-text { margin-top: 2px; color: var(--muted); font-size: 11px; }
+    .edit-zone { margin-top: 20px; padding: 23px; border: 1px dashed #cbd3ea; border-radius: var(--radius-lg); background: rgba(255,255,255,.58); }
+    .edit-zone h2 { font-size: 16px; letter-spacing: -.035em; }
+    .edit-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+    .edit-card { padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: #fff; }
+    .edit-label { display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-size: 11px; font-weight: 800; }
+    .edit-label span { color: var(--ink); font-size: 12px; }
+    .edit-card .select-label { display: block; margin-top: 11px; color: var(--muted); font-size: 10px; }
+    .edit-card select { margin-top: 4px; }
+    .checkline { display: flex; align-items: center; gap: 7px; margin-top: 10px; color: var(--muted); font-size: 11px; }
+    .checkline input { accent-color: var(--blue); }
+    .reflection { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
+    .reflection-label { color: var(--muted); font-size: 11px; font-weight: 800; }
+    .rating { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 9px; }
+    .rating button { width: 31px; height: 31px; border: 1px solid var(--line); border-radius: 50%; color: var(--muted); background: #fff; font-size: 11px; font-weight: 800; }
+    .rating button.selected { border-color: var(--blue); color: #fff; background: var(--blue); box-shadow: 0 5px 12px rgba(75,100,242,.2); }
+    .achievement-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 9px; margin-top: 12px; }
+    .edit-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 15px; }
+    .log-review { margin-top: 20px; padding: 23px; }
+    .log-review-layout { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 20px; }
+    .day-list { display: grid; align-content: start; gap: 7px; }
+    .day-button { width: 100%; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; gap: 2px 8px; color: var(--muted); background: #fff; text-align: left; transition: .2s ease; }
+    .day-button:hover { border-color: #bac5ee; background: #fafbff; }
+    .day-button.selected { border-color: var(--blue); color: var(--ink); background: var(--lavender); box-shadow: 0 7px 16px rgba(75, 100, 242, .08); }
+    .day-date { font-size: 12px; font-weight: 850; }
+    .day-label { font-size: 10px; }
+    .day-score { grid-column: 2; grid-row: 1 / span 2; align-self: center; color: var(--blue); font-size: 16px; font-weight: 850; }
+    .day-button:not(.selected) .day-score { color: var(--muted); }
+    .log-detail { min-width: 0; padding: 19px; border: 1px solid var(--line); border-radius: 16px; background: #fbfcff; }
+    .log-detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; }
+    .log-detail-date { color: var(--muted); font-size: 11px; font-weight: 800; }
+    .log-detail-title { margin-top: 3px; font-size: 19px; font-weight: 850; letter-spacing: -.05em; }
+    .log-detail-score { padding: 7px 10px; border-radius: 10px; color: #2d856e; background: var(--mint-pale); font-size: 12px; font-weight: 850; white-space: nowrap; }
+    .detail-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 17px; }
+    .detail-stat { padding: 11px; border-radius: 11px; background: #fff; }
+    .detail-stat-label { color: var(--muted); font-size: 10px; }
+    .detail-stat-value { margin-top: 4px; font-size: 16px; font-weight: 850; letter-spacing: -.04em; }
+    .detail-comment { margin-top: 15px; padding: 12px 13px; border-left: 3px solid var(--blue); border-radius: 0 10px 10px 0; color: #526181; background: #fff; font-size: 12px; }
+    .detail-timeline { display: grid; gap: 0; margin-top: 15px; }
+    .detail-event { display: grid; grid-template-columns: 55px 10px minmax(0, 1fr); gap: 9px; padding: 9px 0; border-top: 1px solid #e9edf5; }
+    .detail-event-time { color: var(--muted); font-size: 10px; font-weight: 800; }
+    .detail-event-dot { width: 8px; height: 8px; margin-top: 5px; border-radius: 50%; background: var(--mint); box-shadow: 0 0 0 4px var(--mint-pale); }
+    .detail-event-dot.blue { background: var(--blue); box-shadow: 0 0 0 4px var(--lavender); }
+    .detail-event-dot.yellow { background: var(--yellow); box-shadow: 0 0 0 4px #fff7db; }
+    .detail-event-title { font-size: 11px; font-weight: 850; }
+    .detail-event-text { margin-top: 2px; color: var(--muted); font-size: 10px; }
+    .footer-note { margin-top: 22px; color: #909bb5; font-size: 11px; text-align: center; }
+    .toast { position: fixed; right: 24px; bottom: 24px; z-index: 20; max-width: 300px; padding: 12px 15px; border-radius: 12px; color: #fff; background: #17233f; box-shadow: var(--shadow); font-size: 12px; opacity: 0; transform: translateY(10px); pointer-events: none; transition: .25s ease; }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+
+    @media (max-width: 1050px) {
+      .shell { grid-template-columns: 76px minmax(0, 1fr); }
+      .sidebar { padding: 24px 12px; align-items: center; }
+      .brand { padding: 0; }
+      .brand-copy, .nav-label, .sidebar-footer { display: none; }
+      .nav { width: 100%; margin-top: 44px; }
+      .nav-item { justify-content: center; padding: 12px 8px; }
+      .hero-grid { grid-template-columns: minmax(0, 1fr); }
+      .spark-card { min-height: 220px; }
+    }
+    @media (max-width: 820px) {
+      .main { padding: 26px 20px 46px; }
+      .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .workspace { grid-template-columns: 1fr; }
+      .edit-grid { grid-template-columns: 1fr; }
+      .log-review-layout { grid-template-columns: 1fr; }
+      .day-list { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    }
+    @media (max-width: 520px) {
+      .shell { display: block; }
+      .sidebar { position: static; width: 100%; height: auto; padding: 13px 17px; flex-direction: row; justify-content: space-between; }
+      .brand-copy { display: block; }
+      .nav { width: auto; margin: 0; display: flex; gap: 3px; }
+      .nav-item { width: 36px; padding: 8px; }
+      .nav-item.active { background: rgba(255,255,255,.13); }
+      .sidebar-footer { display: none; }
+      .main { padding: 22px 14px 38px; }
+      .topbar { display: block; }
+      .date-pill { display: inline-flex; margin-top: 16px; }
+      .hero-content { align-items: flex-start; flex-direction: column; }
+      .score-ring { align-self: center; }
+      .score-hero { min-height: auto; padding: 23px; }
+      .metric-card { min-height: 168px; padding: 15px; }
+      .metric-value { font-size: 25px; }
+      .meal-row { grid-template-columns: 68px minmax(0,1fr) auto; gap: 8px; }
+      .panel, .edit-zone { padding: 18px; }
+      .log-review { padding: 18px; }
+      .day-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar" aria-label="メインナビゲーション">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">＋</div>
+        <div class="brand-copy">
+          <div class="brand-name">powerUp</div>
+          <div class="brand-sub">daily condition</div>
+        </div>
+      </div>
+      <nav class="nav">
+        <button class="nav-item active" type="button" aria-label="今日" data-scroll="top"><span class="nav-icon">◒</span><span class="nav-label">今日</span></button>
+        <button class="nav-item" type="button" aria-label="記録" data-scroll="edit"><span class="nav-icon">＋</span><span class="nav-label">記録</span></button>
+        <button class="nav-item" type="button" aria-label="ログ" data-scroll="logs"><span class="nav-icon">⌁</span><span class="nav-label">ログ</span></button>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="profile"><div class="avatar">HS</div><span>My space</span></div>
+        <div>自分の調子が上がる条件を<br>少しずつ見つけよう。</div>
+      </div>
+    </aside>
+
+    <main class="main" id="top">
+      <header class="topbar">
+        <div>
+          <div class="eyebrow">Wednesday, July 29</div>
+          <h1>今日は、整える日。</h1>
+          <p class="topbar-copy">睡眠と食事を味方につけて、集中の余白をつくりましょう。</p>
+        </div>
+        <div class="date-pill"><span class="date-dot" aria-hidden="true"></span> 今日の記録はあと2つ</div>
+      </header>
+
+      <div class="content">
+        <section class="hero-grid" aria-label="今日のコンディション">
+          <article class="card score-hero">
+            <div class="hero-content">
+              <div>
+                <div class="hero-title">今日のコンディション</div>
+                <div class="hero-headline" id="heroHeadline">いい流れです。午後の集中を守れそう。</div>
+                <p class="hero-note" id="heroNote">睡眠の土台ができています。昼食後の10分歩行を、今日の小さな実験に。</p>
+              </div>
+              <div class="score-ring" id="scoreRing" aria-label="総合スコア 82点">
+                <div class="score-ring-inner">
+                  <div class="score-number" id="totalScore">82</div>
+                  <div class="score-caption">/ 100 points</div>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <article class="card spark-card" id="trend">
+            <div class="eyebrow">Your rhythm</div>
+            <h2>7日間のリズム</h2>
+            <p class="spark-sub">小さな改善が、平均を少しずつ押し上げています。</p>
+            <div class="sparkline" aria-label="過去7日間のスコア推移">
+              <span class="spark-bar" style="height:55%"></span>
+              <span class="spark-bar" style="height:68%"></span>
+              <span class="spark-bar" style="height:49%"></span>
+              <span class="spark-bar" style="height:75%"></span>
+              <span class="spark-bar" style="height:61%"></span>
+              <span class="spark-bar" style="height:82%"></span>
+              <span class="spark-bar current" style="height:82%"></span>
+            </div>
+            <div class="spark-labels"><span>7日前</span><span>今日</span></div>
+          </article>
+        </section>
+
+        <div class="section-head">
+          <div>
+            <h2 class="section-title">今日の内訳</h2>
+            <p class="section-caption">入力を変えると、スコアもプレビューされます。</p>
+          </div>
+          <button class="ghost-button" type="button" id="saveTop">記録を保存</button>
+        </div>
+
+        <section class="metric-grid" aria-label="スコア内訳">
+          <article class="card metric-card">
+            <div class="metric-top"><div class="metric-label"><span class="metric-icon icon-sleep">☾</span>睡眠</div><div class="metric-points"><span id="sleepPoints">41</span> / 50</div></div>
+            <div class="metric-value"><span id="sleepValue">82</span><small> / 100</small></div>
+            <div class="meter"><div class="meter-fill" id="sleepMeter" style="width:82%"></div></div>
+            <div class="metric-help">Pixel Watch score · Good</div>
+            <div class="form-row"><label class="sr-only" for="sleepInput">睡眠スコア</label><input id="sleepInput" type="number" min="0" max="100" value="82"><button class="mini-button" type="button" id="applySleep">反映</button></div>
+          </article>
+
+          <article class="card metric-card">
+            <div class="metric-top"><div class="metric-label"><span class="metric-icon icon-food">◌</span>食事</div><div class="metric-points"><span id="foodPoints">26</span> / 30</div></div>
+            <div class="metric-value"><span id="foodValue">26</span><small> / 30</small></div>
+            <div class="meter"><div class="meter-fill meter-food" id="foodMeter" style="width:87%"></div></div>
+            <div class="metric-help" id="foodHelp">朝8 · 昼6 · 夜6 · 間食3</div>
+          </article>
+
+          <article class="card metric-card">
+            <div class="metric-top"><div class="metric-label"><span class="metric-icon icon-phone">⌁</span>スマホ</div><div class="metric-points"><span id="phonePoints">7</span> / 10</div></div>
+            <div class="metric-value"><span id="phoneValue">1</span><small id="phoneMinutesValue">h 42m</small></div>
+            <div class="meter"><div class="meter-fill meter-phone" id="phoneMeter" style="width:70%"></div></div>
+            <div class="metric-help" id="phoneHelp">目標2時間 · 作業中の分離を記録</div>
+            <div class="form-row"><label class="sr-only" for="phoneHours">娯楽利用時間（時間）</label><input id="phoneHours" type="number" min="0" max="24" step="0.1" value="1.7"><span style="color:var(--muted);font-size:11px">時間</span><button class="mini-button" type="button" id="applyPhone">反映</button></div>
+            <label class="checkline"><input type="checkbox" id="phoneSeparation"> 作業中は端末を離した</label>
+            <label class="checkline"><input type="checkbox" id="phoneNight"> 就寝前の画面を止めた</label>
+          </article>
+
+          <article class="card metric-card">
+            <div class="metric-top"><div class="metric-label"><span class="metric-icon icon-result">✦</span>実際の成果</div><div class="metric-points"><span id="resultPoints">7</span> / 10</div></div>
+            <div class="metric-value"><span id="resultValue">60</span><small> min focus</small></div>
+            <div class="meter"><div class="meter-fill meter-result" id="resultMeter" style="width:70%"></div></div>
+            <div class="metric-help">企画書の構成を完成</div>
+          </article>
+        </section>
+
+        <div class="section-head">
+          <div>
+            <h2 class="section-title">今日の流れ</h2>
+            <p class="section-caption">行動と成果を、あとから振り返れる形に。</p>
+          </div>
+          <button class="panel-link" type="button" data-scroll="edit">＋ 記録を追加</button>
+        </div>
+
+        <section class="workspace">
+          <article class="card panel">
+            <div class="panel-title-row"><h2 class="panel-title">Activity log</h2><button class="panel-link" type="button" data-scroll="edit">編集</button></div>
+            <div class="meal-list">
+              <div class="meal-row"><div class="meal-time">08:10<br><span>朝食</span></div><div class="meal-main"><div class="meal-name">トースト・卵・ヨーグルト</div><div class="meal-detail">主食・たんぱく質・乳製品 · 量はちょうどよい</div></div><div class="meal-score" id="breakfastScore">8 / 8</div></div>
+              <div class="meal-row"><div class="meal-time">12:35<br><span>昼食</span></div><div class="meal-main"><div class="meal-name">鶏肉と野菜の定食</div><div class="meal-detail">主食・主菜あり · 食後歩行なし</div></div><div class="meal-score" id="lunchScore">6 / 8</div></div>
+              <div class="meal-row"><div class="meal-time">15:20<br><span>間食</span></div><div class="meal-main"><div class="meal-name">素焼きナッツ 20g</div><div class="meal-detail">小腹対策 · たんぱく質と食物繊維</div></div><div class="meal-score" id="snackScore">3 / 3</div></div>
+              <div class="meal-row"><div class="meal-time">20:05<br><span>夕食</span></div><div class="meal-main"><div class="meal-name">魚・玄米・具だくさん味噌汁</div><div class="meal-detail">就寝まで3時間 · 食後歩行なし</div></div><div class="meal-score" id="dinnerScore">6 / 8</div></div>
+            </div>
+            <div class="log-card">
+              <div class="log-item"><span class="log-dot blue"></span><div><div class="log-title">集中 60分</div><div class="log-text">企画書の構成を完成させ、レビュー依頼まで完了。</div></div></div>
+              <div class="log-item"><span class="log-dot"></span><div><div class="log-title">AIの気づき</div><div class="log-text">昼食後の歩行があった日は、午後の眠気が軽い傾向。</div></div></div>
+            </div>
+          </article>
+
+          <aside>
+            <article class="card ai-card">
+              <div class="ai-badge">✦ Gemini AI insight</div>
+              <h2 id="aiHeadline">午後の集中を守る、小さな一手</h2>
+              <p id="aiBody">今日の食事はバランスが良好です。昼食後に少し歩けると、午後のリズムをさらに整えられそうです。</p>
+              <div class="ai-action"><strong>明日の実験</strong><span id="aiAction">昼食後に10分だけ歩く</span></div>
+            </article>
+
+            <article class="card panel" style="margin-top:20px">
+              <div class="panel-title-row"><h2 class="panel-title">7日平均</h2><span class="section-caption">前週比 +4</span></div>
+              <div style="display:flex;align-items:end;gap:12px">
+                <div style="font-size:35px;font-weight:850;letter-spacing:-.07em">76<small style="font-size:13px;color:var(--muted);letter-spacing:0"> / 100</small></div>
+                <div style="padding-bottom:7px;color:#2d856e;font-size:11px;font-weight:800">↑ いい流れ</div>
+              </div>
+              <div class="meter" style="margin-top:14px"><div class="meter-fill meter-food" style="width:76%"></div></div>
+            </article>
+          </aside>
+        </section>
+
+        <section class="edit-zone" id="edit" aria-labelledby="editTitle">
+          <div class="panel-title-row"><div><h2 id="editTitle">記録を編集</h2><p class="section-caption" style="margin-top:4px">選択式中心。Geminiが配点案をつくり、最後はあなたが確定します。</p></div><span class="ai-badge" style="color:var(--blue);background:var(--lavender)">Gemini API preview</span></div>
+          <div class="edit-grid">
+            <div class="edit-card">
+              <div class="edit-label">朝食 <span id="breakfastEditScore">8 / 8</span></div>
+              <label class="select-label" for="breakfastSelect">食事のタイプ</label>
+              <select id="breakfastSelect" class="meal-select" data-meal="breakfast">
+                <option value="balanced">バランス良好</option>
+                <option value="partial">少し不足</option>
+                <option value="heavy">食べ過ぎ・偏り</option>
+              </select>
+              <label class="checkline"><input type="checkbox" id="breakfastWalk" checked> 食後に少し歩いた</label>
+            </div>
+            <div class="edit-card">
+              <div class="edit-label">昼食 <span id="lunchEditScore">6 / 8</span></div>
+              <label class="select-label" for="lunchSelect">食事のタイプ</label>
+              <select id="lunchSelect" class="meal-select" data-meal="lunch">
+                <option value="balanced">バランス良好</option>
+                <option value="partial" selected>少し不足</option>
+                <option value="ramen">麺類・具あり</option>
+                <option value="heavy">食べ過ぎ・偏り</option>
+              </select>
+              <label class="checkline"><input type="checkbox" id="lunchWalk"> 食後に少し歩いた</label>
+            </div>
+            <div class="edit-card">
+              <div class="edit-label">夕食 <span id="dinnerEditScore">6 / 8</span></div>
+              <label class="select-label" for="dinnerSelect">食事のタイプ</label>
+              <select id="dinnerSelect" class="meal-select" data-meal="dinner">
+                <option value="balanced">バランス良好</option>
+                <option value="partial" selected>少し不足</option>
+                <option value="ramen">麺類・具あり</option>
+                <option value="heavy">食べ過ぎ・偏り</option>
+              </select>
+              <label class="checkline"><input type="checkbox" id="dinnerWalk"> 食後に少し歩いた</label>
+            </div>
+          </div>
+
+          <div class="edit-grid" style="margin-top:12px">
+            <div class="edit-card">
+              <div class="edit-label">食事の時間帯 <span id="timingScore">3 / 3</span></div>
+              <label class="select-label" for="timingSelect">今日のリズム</label>
+              <select id="timingSelect">
+                <option value="3">規則的・就寝直前なし</option>
+                <option value="2">少し不規則</option>
+                <option value="1">遅い食事・長い空腹あり</option>
+              </select>
+            </div>
+            <div class="edit-card">
+              <div class="edit-label">間食 <span id="snackEditScore">3 / 3</span></div>
+              <label class="select-label" for="snackSelect">内容と量</label>
+              <select id="snackSelect">
+                <option value="3">なし／ナッツ・ヨーグルトなど少量</option>
+                <option value="2">おにぎり・卵・乳製品など</option>
+                <option value="1">お菓子・甘い飲料のみ</option>
+                <option value="0">大量・連続・就寝直前</option>
+              </select>
+            </div>
+            <div class="edit-card">
+              <div class="edit-label">集中作業 <span id="focusPoints">2 / 3</span></div>
+              <label class="select-label" for="focusInput">集中できた時間（分）</label>
+              <input id="focusInput" type="number" min="0" step="10" value="60" aria-label="集中できた時間（分）">
+              <div class="section-caption" style="margin-top:8px">90分以上で3点（上限）</div>
+            </div>
+          </div>
+
+          <div class="reflection">
+            <div class="reflection-label">今日の手応え</div>
+            <div class="rating" role="radiogroup" aria-label="今日の手応え">
+              <button type="button" data-rating="1">1</button><button type="button" data-rating="2">2</button><button type="button" data-rating="3">3</button><button type="button" class="selected" data-rating="4">4</button><button type="button" data-rating="5">5</button>
+            </div>
+            <div class="achievement-row"><label class="sr-only" for="achievementInput">今日実際に進んだこと</label><textarea id="achievementInput" placeholder="今日、実際に進んだことを1〜2文で">企画書の構成を完成させ、上司にレビュー依頼を送った。</textarea><button class="primary-button" type="button" id="aiScoreButton">Gemini採点案</button></div>
+            <label class="select-label" for="commentInput">ひとことメモ（任意）</label>
+            <input id="commentInput" type="text" placeholder="例：昼食後の眠気が少なかった">
+          </div>
+          <div class="edit-actions"><button class="ghost-button" type="button" id="resetButton">サンプルに戻す</button><button class="primary-button" type="button" id="saveButton">今日の記録を確定</button></div>
+        </section>
+
+        <section class="card log-review" id="logs" aria-labelledby="logReviewTitle">
+          <div class="panel-title-row">
+            <div>
+              <h2 class="panel-title" id="logReviewTitle">デイリーログを振り返る</h2>
+              <p class="section-caption" style="margin-top:4px">過去の1日を選ぶと、その日の行動・成果・AIの気づきを確認できます。</p>
+            </div>
+            <select id="logRange" aria-label="ログの期間" style="width:auto">
+              <option>過去7日</option>
+              <option>過去30日</option>
+            </select>
+          </div>
+          <div class="log-review-layout">
+            <div class="day-list" role="listbox" aria-label="日付を選択">
+              <button class="day-button selected" type="button" data-day="today" role="option" aria-selected="true"><span class="day-date">7/29</span><span class="day-label">今日</span><span class="day-score">82</span></button>
+              <button class="day-button" type="button" data-day="yesterday" role="option" aria-selected="false"><span class="day-date">7/28</span><span class="day-label">昨日</span><span class="day-score">76</span></button>
+              <button class="day-button" type="button" data-day="twoDaysAgo" role="option" aria-selected="false"><span class="day-date">7/27</span><span class="day-label">月曜日</span><span class="day-score">71</span></button>
+              <button class="day-button" type="button" data-day="threeDaysAgo" role="option" aria-selected="false"><span class="day-date">7/26</span><span class="day-label">日曜日</span><span class="day-score">84</span></button>
+            </div>
+            <div class="log-detail" aria-live="polite">
+              <div class="log-detail-head">
+                <div><div class="log-detail-date" id="logDetailDate">2026年7月29日 · 今日</div><div class="log-detail-title" id="logDetailTitle">整えるほど、集中は続く。</div></div>
+                <div class="log-detail-score" id="logDetailScore">82 / 100</div>
+              </div>
+              <div class="detail-grid">
+                <div class="detail-stat"><div class="detail-stat-label">睡眠</div><div class="detail-stat-value" id="logSleepStat">41 / 50</div></div>
+                <div class="detail-stat"><div class="detail-stat-label">食事</div><div class="detail-stat-value" id="logFoodStat">26 / 30</div></div>
+                <div class="detail-stat"><div class="detail-stat-label">スマホ</div><div class="detail-stat-value" id="logPhoneStat">7 / 10</div></div>
+                <div class="detail-stat"><div class="detail-stat-label">成果</div><div class="detail-stat-value" id="logResultStat">8 / 10</div></div>
+              </div>
+              <div class="detail-comment" id="logDetailComment">昼食後に歩いた日は、午後の眠気が軽い傾向。今日は夕食までのリズムも安定しています。</div>
+              <div class="detail-timeline" id="logTimeline"></div>
+            </div>
+          </div>
+        </section>
+
+        <p class="footer-note">この画面はpowerUpの要件定義をもとにした操作モックです。睡眠・食事の点数は医療上の診断ではありません。</p>
+      </div>
+    </main>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite">記録を保存しました。</div>
+
+  <script>
+    (() => {
+      const mealBase = { balanced: 7, partial: 6, ramen: 5, heavy: 3 };
+      const mealLabels = { balanced: 'バランス良好', partial: '少し不足', ramen: '麺類・具あり', heavy: '食べ過ぎ・偏り' };
+      const dailyLogs = {
+        today: {
+          date: '2026年7月29日 · 今日', score: 82, title: '整えるほど、集中は続く。', sleep: '41 / 50', food: '26 / 30', phone: '7 / 10', result: '8 / 10',
+          comment: '昼食後に歩いた日は、午後の眠気が軽い傾向。今日は夕食までのリズムも安定しています。',
+          events: [
+            ['08:10', '朝食を記録', 'トースト・卵・ヨーグルト · 8 / 8', ''],
+            ['12:35', '昼食を記録', '鶏肉と野菜の定食 · 6 / 8', 'blue'],
+            ['15:20', '間食を記録', '素焼きナッツ20g · 3 / 3', 'yellow'],
+            ['17:40', '成果を記録', '企画書の構成を完成 · 集中60分', 'blue']
+          ]
+        },
+        yesterday: {
+          date: '2026年7月28日 · 昨日', score: 76, title: '午後のリズムを取り戻した日。', sleep: '37 / 50', food: '22 / 30', phone: '8 / 10', result: '9 / 10',
+          comment: '睡眠は少し短めでしたが、スマホを作業から離せたことで成果が残りました。',
+          events: [
+            ['07:45', '睡眠を記録', 'Pixel Watch 74 · 朝の回復感 3 / 5', ''],
+            ['13:10', '昼食後の眠気', '眠気 3 / 5 · 食後歩行なし', 'yellow'],
+            ['16:30', '集中ブロック', '集中90分 · メール処理を完了', 'blue']
+          ]
+        },
+        twoDaysAgo: {
+          date: '2026年7月27日 · 月曜日', score: 71, title: '入力が少なく、原因を探している日。', sleep: '35 / 50', food: '20 / 30', phone: '6 / 10', result: '10 / 10',
+          comment: '成果は出ています。次は食事とスマホの記録を残すと、再現性が見えそうです。',
+          events: [
+            ['09:00', '成果を記録', '会議で意思決定 · 手応え 4 / 5', 'blue'],
+            ['18:20', 'スマホを記録', '娯楽利用 3.2時間', 'yellow']
+          ]
+        },
+        threeDaysAgo: {
+          date: '2026年7月26日 · 日曜日', score: 84, title: '休みながら、いい土台をつくった日。', sleep: '45 / 50', food: '25 / 30', phone: '8 / 10', result: '6 / 10',
+          comment: '成果は少なめでも、睡眠と食事が整った日。休養日として良い使い方です。',
+          events: [
+            ['08:30', '睡眠を記録', 'Pixel Watch 90 · 朝の回復感 5 / 5', ''],
+            ['11:45', '食後に歩行', '散歩20分 · 食事スコア 8 / 8', ''],
+            ['20:10', 'ひとことメモ', 'よく休めたので、明日は軽く始める', 'yellow']
+          ]
+        }
+      };
+      let rating = 4;
+      let achievementPoints = 4;
+
+      const byId = (id) => document.getElementById(id);
+      const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+
+      function scoreMeal(name) {
+        const select = byId(name + 'Select');
+        const walk = byId(name + 'Walk').checked;
+        return clamp(mealBase[select.value] + (walk ? 1 : 0), 0, 8);
+      }
+
+      function scoreFocus(minutes) {
+        if (minutes >= 90) return 3;
+        if (minutes >= 60) return 2;
+        if (minutes >= 30) return 1;
+        return 0;
+      }
+
+      function scoreAchievement(text) {
+        const length = text.trim().length;
+        if (length === 0) return 0;
+        if (/(完成|提出|送った|公開|決定|納品|解決|レビュー依頼)/.test(text)) return 5;
+        if (length >= 35) return 4;
+        if (length >= 18) return 3;
+        return 2;
+      }
+
+      function scoreReflection(value) {
+        if (value <= 2) return 0;
+        if (value === 3) return 1;
+        return 2;
+      }
+
+      function mealClass(score) {
+        if (score <= 4) return 'meal-score low';
+        if (score <= 6) return 'meal-score warn';
+        return 'meal-score';
+      }
+
+      function renderDailyLog(key) {
+        const log = dailyLogs[key] || dailyLogs.today;
+        byId('logDetailDate').textContent = log.date;
+        byId('logDetailTitle').textContent = log.title;
+        byId('logDetailScore').textContent = log.score + ' / 100';
+        byId('logSleepStat').textContent = log.sleep;
+        byId('logFoodStat').textContent = log.food;
+        byId('logPhoneStat').textContent = log.phone;
+        byId('logResultStat').textContent = log.result;
+        byId('logDetailComment').textContent = log.comment;
+        const timeline = byId('logTimeline');
+        timeline.replaceChildren();
+        log.events.forEach(([time, title, text, tone]) => {
+          const event = document.createElement('div');
+          event.className = 'detail-event';
+          const eventTime = document.createElement('div');
+          eventTime.className = 'detail-event-time';
+          eventTime.textContent = time;
+          const dot = document.createElement('span');
+          dot.className = 'detail-event-dot' + (tone ? ' ' + tone : '');
+          const copy = document.createElement('div');
+          const eventTitle = document.createElement('div');
+          eventTitle.className = 'detail-event-title';
+          eventTitle.textContent = title;
+          const eventText = document.createElement('div');
+          eventText.className = 'detail-event-text';
+          eventText.textContent = text;
+          copy.append(eventTitle, eventText);
+          event.append(eventTime, dot, copy);
+          timeline.append(event);
+        });
+        document.querySelectorAll('[data-day]').forEach((button) => {
+          const selected = button.dataset.day === key;
+          button.classList.toggle('selected', selected);
+          button.setAttribute('aria-selected', String(selected));
+        });
+      }
+
+      function update() {
+        const sleep = clamp(Number(byId('sleepInput').value) || 0, 0, 100);
+        const sleepPoints = Math.round(sleep * 0.5);
+        const breakfast = scoreMeal('breakfast');
+        const lunch = scoreMeal('lunch');
+        const dinner = scoreMeal('dinner');
+        const timing = Number(byId('timingSelect').value);
+        const snack = Number(byId('snackSelect').value);
+        const food = breakfast + lunch + dinner + timing + snack;
+        const focus = clamp(Number(byId('focusInput').value) || 0, 0, 9999);
+        const focusPoints = scoreFocus(focus);
+        const reflectionPoints = scoreReflection(rating);
+        const result = clamp(achievementPoints + focusPoints + reflectionPoints, 0, 10);
+        const phone = calcPhone();
+        const phoneHours = clamp(Number(byId('phoneHours').value) || 0, 0, 24);
+        const phoneWholeHours = Math.floor(phoneHours);
+        const phoneMinutes = Math.round((phoneHours - phoneWholeHours) * 60);
+        const total = clamp(sleepPoints + food + phone + result, 0, 100);
+
+        byId('sleepPoints').textContent = sleepPoints;
+        byId('sleepValue').textContent = sleep;
+        byId('sleepMeter').style.width = sleep + '%';
+        byId('foodPoints').textContent = food;
+        byId('foodValue').textContent = food;
+        byId('foodMeter').style.width = (food / 30 * 100) + '%';
+        byId('phonePoints').textContent = phone;
+        byId('phoneMeter').style.width = (phone / 10 * 100) + '%';
+        byId('phoneValue').textContent = phoneWholeHours;
+        byId('phoneMinutesValue').textContent = 'h ' + phoneMinutes + 'm';
+        byId('resultPoints').textContent = result;
+        byId('resultMeter').style.width = (result / 10 * 100) + '%';
+        byId('resultValue').textContent = focus;
+        byId('focusPoints').textContent = focusPoints + ' / 3';
+
+        [['breakfast', breakfast], ['lunch', lunch], ['dinner', dinner]].forEach(([name, score]) => {
+          byId(name + 'Score').textContent = score + ' / 8';
+          byId(name + 'Score').className = mealClass(score);
+          byId(name + 'EditScore').textContent = score + ' / 8';
+        });
+        byId('snackScore').textContent = snack + ' / 3';
+        byId('snackScore').className = mealClass(snack + 5);
+        byId('snackEditScore').textContent = snack + ' / 3';
+        byId('timingScore').textContent = timing + ' / 3';
+        byId('foodHelp').textContent = '朝' + breakfast + ' · 昼' + lunch + ' · 夜' + dinner + ' · 間食' + snack;
+
+        byId('totalScore').textContent = total;
+        byId('scoreRing').style.setProperty('--score-deg', (total / 100 * 360) + 'deg');
+        byId('scoreRing').setAttribute('aria-label', '総合スコア ' + total + '点');
+        updateMessage(total, food, phone, result);
+      }
+
+      function calcPhone() {
+        const hours = Number(byId('phoneHours')?.value || 1.7);
+        const separation = byId('phoneSeparation')?.checked !== false;
+        const night = byId('phoneNight')?.checked !== false;
+        let score = hours <= 2 ? 7 : hours <= 3 ? 5 : hours <= 4 ? 3 : 1;
+        if (separation) score += 2;
+        if (night) score += 1;
+        return clamp(score, 0, 10);
+      }
+
+      function updateMessage(total, food, phone, result) {
+        if (food <= 19) {
+          byId('heroHeadline').textContent = '食事から、午後を整えよう。';
+          byId('heroNote').textContent = '今日は食事の記録が改善ポイント。まずは主食・たんぱく質・野菜を一度にそろえる実験を。';
+          byId('aiHeadline').textContent = '次の食事を、ひとつだけ整える';
+          byId('aiBody').textContent = '食事スコアが今日の改善余地です。料理を変えきれなくても、飲み物を無糖にするだけで記録を進められます。';
+          byId('aiAction').textContent = '次の食事にたんぱく質を1品足す';
+        } else if (phone <= 5) {
+          byId('heroHeadline').textContent = '通知のない時間を、集中に。';
+          byId('heroNote').textContent = 'スマホの利用が少し高めです。次の集中ブロックだけ、端末を手の届かない場所へ。';
+          byId('aiHeadline').textContent = 'アクセスに、ひとつ摩擦を';
+          byId('aiBody').textContent = 'スマホの利用時間が今日のボトルネックかもしれません。意志ではなく環境を少し変えてみましょう。';
+          byId('aiAction').textContent = '次の集中時間は通知をオフにする';
+        } else if (result <= 5) {
+          byId('heroHeadline').textContent = '小さな成果を、言葉にしよう。';
+          byId('heroNote').textContent = '今日の実績を一言残すと、明日の改善が見えやすくなります。まずは進んだことを1つだけ。';
+          byId('aiHeadline').textContent = '今日の前進を、1つ記録する';
+          byId('aiBody').textContent = '成果は大きさより、具体的に残すことが大切です。AI採点はあとから修正できます。';
+          byId('aiAction').textContent = '今日進んだことを1〜2文で残す';
+        } else {
+          byId('heroHeadline').textContent = total >= 85 ? 'いい流れです。午後の集中を守れそう。' : '整えるほど、集中は続く。';
+          byId('heroNote').textContent = '睡眠と食事の土台ができています。昼食後の10分歩行を、今日の小さな実験に。';
+          byId('aiHeadline').textContent = '午後の集中を守る、小さな一手';
+          byId('aiBody').textContent = '今日の食事はバランスが良好です。昼食後に少し歩けると、午後のリズムをさらに整えられそうです。';
+          byId('aiAction').textContent = '昼食後に10分だけ歩く';
+        }
+      }
+
+      function showToast(message) {
+        const toast = byId('toast');
+        toast.textContent = message;
+        toast.classList.add('show');
+        window.clearTimeout(showToast.timer);
+        showToast.timer = window.setTimeout(() => toast.classList.remove('show'), 2300);
+      }
+
+      document.querySelectorAll('.meal-select, #timingSelect, #snackSelect, #focusInput, #phoneHours').forEach((element) => element.addEventListener('input', update));
+      document.querySelectorAll('.meal-select').forEach((element) => element.addEventListener('change', update));
+      document.querySelectorAll('.edit-card input[type="checkbox"]').forEach((element) => element.addEventListener('change', update));
+      byId('applySleep').addEventListener('click', () => { update(); showToast('睡眠スコアを反映しました。'); });
+      byId('phoneSeparation').addEventListener('change', update);
+      byId('phoneNight').addEventListener('change', update);
+      byId('applyPhone').addEventListener('click', () => { update(); showToast('スマホ利用を反映しました。'); });
+      byId('aiScoreButton').addEventListener('click', () => {
+        achievementPoints = scoreAchievement(byId('achievementInput').value);
+        update();
+        showToast('Geminiの採点案を更新しました。');
+      });
+      byId('saveButton').addEventListener('click', () => { update(); showToast('今日の記録を確定しました。'); });
+      byId('saveTop').addEventListener('click', () => { document.getElementById('edit').scrollIntoView({ behavior: 'smooth' }); showToast('下の編集欄から記録を確認できます。'); });
+      byId('resetButton').addEventListener('click', () => {
+        byId('sleepInput').value = 82;
+        byId('breakfastSelect').value = 'balanced';
+        byId('lunchSelect').value = 'partial';
+        byId('dinnerSelect').value = 'partial';
+        byId('breakfastWalk').checked = true;
+        byId('lunchWalk').checked = false;
+        byId('dinnerWalk').checked = false;
+        byId('timingSelect').value = '3';
+        byId('snackSelect').value = '3';
+        byId('focusInput').value = 60;
+        byId('phoneHours').value = 1.7;
+        byId('phoneSeparation').checked = false;
+        byId('phoneNight').checked = false;
+        byId('achievementInput').value = '企画書の構成を完成させ、上司にレビュー依頼を送った。';
+        rating = 4;
+        achievementPoints = 4;
+        document.querySelectorAll('[data-rating]').forEach((button) => button.classList.toggle('selected', button.dataset.rating === '4'));
+        update();
+        showToast('サンプル状態に戻しました。');
+      });
+      document.querySelectorAll('[data-day]').forEach((button) => button.addEventListener('click', () => renderDailyLog(button.dataset.day)));
+      document.querySelectorAll('[data-rating]').forEach((button) => button.addEventListener('click', () => {
+        rating = Number(button.dataset.rating);
+        document.querySelectorAll('[data-rating]').forEach((item) => item.classList.toggle('selected', item === button));
+        update();
+      }));
+      document.querySelectorAll('[data-scroll]').forEach((button) => button.addEventListener('click', () => {
+        const target = document.getElementById(button.dataset.scroll);
+        if (target) target.scrollIntoView({ behavior: 'smooth' });
+      }));
+
+      renderDailyLog('today');
+      update();
+    })();
+  </script>
+</body>
+</html>
