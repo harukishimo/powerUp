@@ -63,6 +63,19 @@ ai_insights
 - `/access`：`APP_ACCESS_TOKEN`設定時のアクセスゲート
 - `/api/health`：デプロイ後の設定状態確認（秘密情報そのものは返しません）
 
+## PWA
+
+`app/manifest.ts`と`public/icons/`に、Chromeがインストール可能なアプリとして判定するためのManifestと192px・512pxアイコンを用意しています。`public/sw.js`はPWAのライフサイクルを有効にしますが、`/api/`のレスポンスや個人データはキャッシュしません。
+
+デプロイ後は、次の条件を満たした状態でChromeを再読み込みしてください。
+
+1. HTTPS（またはlocalhost）でアクセスする
+2. DevToolsのApplication → ManifestでManifestと2種類のアイコンが読み込めていることを確認する
+3. 既存の通常ショートカットを削除し、ページを再読み込みする
+4. アドレスバーのインストールアイコン、またはChromeメニューの「powerUpをインストール」を選ぶ
+
+`APP_ACCESS_TOKEN`を使う場合も、Manifest・アイコン・Service Workerは認証リダイレクトの対象にせず、静的ファイルとして配信してください。
+
 ## API発火方針
 
 - 入力中はAPIを発火しない
