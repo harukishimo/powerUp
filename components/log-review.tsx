@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { parseApiResponse } from "@/lib/client-api";
 import { createBlankLog } from "@/lib/demo-data";
 import { shiftDate } from "@/lib/date";
+import { SCORE_MAX } from "@/lib/scoring";
 import { LogDetailResponseSchema } from "@/lib/validation";
 import type { DailyLog, DailyLogSummary } from "@/types/domain";
 
@@ -107,10 +108,10 @@ function LogDetail({ log }: { log: DailyLog }) {
         <div className="log-detail-score">{log.scores.total === null ? "未記録" : `${log.scores.total} / 100`}</div>
       </div>
       <div className="detail-grid">
-        <DetailStat label="睡眠" value={score(log.scores.sleep, 50)} />
-        <DetailStat label="食事" value={score(log.scores.food, 30)} />
-        <DetailStat label="スマホ" value={score(log.scores.phone, 10)} />
-        <DetailStat label="成果" value={score(log.scores.result, 10)} />
+        <DetailStat label="睡眠コンディション" value={score(log.scores.sleep, SCORE_MAX.sleep)} />
+        <DetailStat label="食事行動" value={score(log.scores.food, SCORE_MAX.food)} />
+        <DetailStat label="デジタル注意環境" value={score(log.scores.phone, SCORE_MAX.phone)} />
+        <DetailStat label="パフォーマンス" value={score(log.scores.result, SCORE_MAX.result)} />
       </div>
       <div className="detail-comment"><strong>今日の振り返り</strong>{log.result.comment || "コメントは未入力です。"}</div>
       <div className="detail-records">

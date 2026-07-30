@@ -109,6 +109,7 @@ npm run build
 ## ドキュメント
 
 - [`docs/要件定義書.md`](./docs/要件定義書.md)
+- [`docs/採点ロジックレビュー.md`](./docs/採点ロジックレビュー.md)
 - [`docs/デザイン.md`](./docs/デザイン.md)
 - [`docs/技術要件書.md`](./docs/技術要件書.md)
 - [`docs/API発火仕様書.md`](./docs/API発火仕様書.md)

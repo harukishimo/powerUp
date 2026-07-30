@@ -1,19 +1,35 @@
 import { describe, expect, it } from "vitest";
 import {
+  calculateAchievementPoints,
   calculateFocusPoints,
   calculateFoodPoints,
   calculateMealPoints,
+  calculatePhonePoints,
   calculateReflectionPoints,
   calculateSnackPoints,
   calculateSleepPoints,
   calculateScores,
+  SCORE_VERSION,
 } from "@/lib/scoring";
-import type { DailyLogInput } from "@/types/domain";
+import type { DailyLogInput, MealInput } from "@/types/domain";
 import { MemoryStorage } from "@/lib/storage";
 import { AiInsightSchema, DailyLogInputSchema } from "@/lib/validation";
 import { fallbackAiScore } from "@/lib/gemini";
 import { isValidDateString } from "@/lib/date";
 import { buildWeeklyTrend } from "@/lib/trend";
+
+const blankMeal = (type: MealInput["type"]): MealInput => ({
+  type,
+  eatenAt: null,
+  carbohydrateLevel: null,
+  proteinLevel: null,
+  vegetableLevel: null,
+  portionLevel: null,
+  drinkType: null,
+  features: ["normal"],
+  walkMinutes: null,
+  postMealSleepiness: null,
+});
 
 const emptyLog = (): DailyLogInput => ({
   date: "2026-07-29",
@@ -24,91 +40,130 @@ const emptyLog = (): DailyLogInput => ({
   snackRecorded: false,
   phone: { entertainmentMinutes: null, separatedDuringWork: null, limitedMorningOrNightUse: null },
   result: { achievementText: "", focusMinutes: null, reflectionRating: null, comment: "", confirmedAchievementScore: null },
-  scoreVersion: "v1",
+  scoreVersion: SCORE_VERSION,
 });
 
-describe("scoring", () => {
-  it("converts Pixel Watch sleep score to 50 points", () => {
-    expect(calculateSleepPoints(82)).toBe(41);
-    expect(calculateSleepPoints(100)).toBe(50);
-    expect(calculateSleepPoints(null)).toBeNull();
+const completeMeal = (type: MealInput["type"]): MealInput => ({
+  ...blankMeal(type),
+  eatenAt: type === "breakfast" ? "08:00" : type === "lunch" ? "12:00" : "19:00",
+  carbohydrateLevel: "sufficient",
+  proteinLevel: "sufficient",
+  vegetableLevel: "sufficient",
+  portionLevel: "just-right",
+  drinkType: "water-tea",
+  walkMinutes: 10,
+});
+
+describe("scoring v2", () => {
+  it("combines a wearable sleep score with a small recovery-feeling adjustment", () => {
+    expect(calculateSleepPoints(82)).toBe(25);
+    expect(calculateSleepPoints(82, 4)).toBe(24);
+    expect(calculateSleepPoints(66, 1)).toBe(17);
+    expect(calculateSleepPoints(66, 5)).toBe(21);
+    expect(calculateSleepPoints(100, 5)).toBe(30);
+    expect(calculateSleepPoints(null, 5)).toBeNull();
   });
 
-  it("maps focus time boundaries", () => {
-    expect(calculateFocusPoints(29)).toBe(0);
-    expect(calculateFocusPoints(30)).toBe(1);
-    expect(calculateFocusPoints(60)).toBe(2);
-    expect(calculateFocusPoints(90)).toBe(3);
-  });
-
-  it("maps reflection rating", () => {
+  it("weights performance outcomes continuously on a 100-point scale", () => {
+    expect(calculateAchievementPoints(5)).toBe(55);
+    expect(calculateFocusPoints(0)).toBe(0);
+    expect(calculateFocusPoints(30)).toBe(10);
+    expect(calculateFocusPoints(60)).toBe(20);
+    expect(calculateFocusPoints(90)).toBe(30);
+    expect(calculateFocusPoints(180)).toBe(30);
     expect(calculateReflectionPoints(1)).toBe(0);
-    expect(calculateReflectionPoints(3)).toBe(1);
-    expect(calculateReflectionPoints(5)).toBe(2);
+    expect(calculateReflectionPoints(3)).toBe(8);
+    expect(calculateReflectionPoints(5)).toBe(15);
   });
 
-  it("does not turn missing categories into zero points", () => {
-    const result = calculateScores(emptyLog());
-    expect(result.total).toBeNull();
-    expect(result.recordingRate).toBe(0);
-    expect(result.sleep).toBeNull();
+  it("keeps a completely empty log unscored", () => {
+    const scores = calculateScores(emptyLog());
+    expect(scores.total).toBeNull();
+    expect(scores.result).toBeNull();
+    expect(scores.recordingRate).toBe(0);
+    expect(scores.sleep).toBeNull();
   });
 
-  it("keeps partial logs on the fixed 100-point scale", () => {
+  it("produces 100 only when all three performance outcomes are complete and maximal", () => {
     const input = emptyLog();
-    input.sleep.pixelWatchScore = 82;
-    input.phone.entertainmentMinutes = 60;
-    input.phone.separatedDuringWork = true;
-    input.phone.limitedMorningOrNightUse = true;
     input.result.confirmedAchievementScore = 5;
     input.result.focusMinutes = 90;
     input.result.reflectionRating = 5;
-    const partial = calculateScores(input);
-    expect(partial.total).toBe(61);
-    expect(partial.recordingRate).toBe(70);
-  });
-
-  it("does not inflate a sleep-only score to a 100-point percentage", () => {
-    const input = emptyLog();
-    input.sleep.pixelWatchScore = 66;
 
     const scores = calculateScores(input);
 
-    expect(scores.sleep).toBe(33);
-    expect(scores.total).toBe(33);
-    expect(scores.recordingRate).toBe(50);
+    expect(scores.result).toBe(100);
+    expect(scores.total).toBe(100);
+    expect(scores.recordingRate).toBe(100);
+    expect(scores.provisional).toBe(false);
+  });
+
+  it("does not normalize a partial performance log", () => {
+    const input = emptyLog();
+    input.result.confirmedAchievementScore = 5;
+
+    const scores = calculateScores(input);
+
+    expect(scores.total).toBe(55);
+    expect(scores.recordingRate).toBe(55);
     expect(scores.provisional).toBe(true);
   });
 
-  it("scores meals, snacks, and timing within their fixed caps", () => {
-    const completeMeal = {
-      type: "breakfast" as const,
-      eatenAt: "08:00",
-      carbohydrateLevel: "sufficient" as const,
-      proteinLevel: "sufficient" as const,
-      vegetableLevel: "sufficient" as const,
-      portionLevel: "just-right" as const,
-      drinkType: "water-tea" as const,
-      features: ["normal" as const],
-      walkMinutes: 10,
-      postMealSleepiness: null,
-    };
-    expect(calculateMealPoints(completeMeal)).toBe(8);
-    expect(calculateSnackPoints([], true)).toBe(3);
-    expect(calculateSnackPoints([{ id: "snack-1", eatenAt: "22:00", occurred: true, category: "large-or-late", amountLevel: "large", planned: false, beforeBed: true, note: "" }], true)).toBe(0);
+  it("does not mix condition scores into the performance total", () => {
     const input = emptyLog();
-    input.meals = [completeMeal];
+    input.sleep = { pixelWatchScore: 100, recoveryFeeling: 5 };
+    input.meals = ["breakfast", "lunch", "dinner"].map((type) => completeMeal(type as MealInput["type"]));
     input.mealTiming = { regular: true, dinnerBeforeBed: true, noLongGap: true };
     input.snackRecorded = true;
-    expect(calculateFoodPoints(input)).toBe(14);
+    input.phone = { entertainmentMinutes: 60, separatedDuringWork: true, limitedMorningOrNightUse: true };
+
+    const scores = calculateScores(input);
+
+    expect(scores.sleep).toBe(30);
+    expect(scores.food).toBe(20);
+    expect(scores.phone).toBe(8);
+    expect(scores.total).toBeNull();
+    expect(scores.recordingRate).toBe(0);
   });
 
-  it("preserves missing values and distinguishes them from zero", () => {
-    expect(calculateMealPoints({ ...emptyLog().meals[0]!, type: "breakfast" })).toBeNull();
+  it("scores explicit meal behavior without rewarding missing fields", () => {
+    expect(calculateMealPoints(completeMeal("breakfast"))).toBe(5);
+    expect(calculateMealPoints(blankMeal("breakfast"))).toBeNull();
+    expect(calculateMealPoints({ ...blankMeal("breakfast"), drinkType: "water-tea" })).toBe(1);
+    expect(calculateMealPoints({ ...blankMeal("breakfast"), drinkType: "sweet" })).toBe(0);
+  });
+
+  it("caps complete food behavior at 20 points", () => {
+    const input = emptyLog();
+    input.meals = [
+      completeMeal("breakfast"),
+      completeMeal("lunch"),
+      completeMeal("dinner"),
+    ];
+    input.mealTiming = { regular: true, dinnerBeforeBed: true, noLongGap: true };
+    input.snackRecorded = true;
+
+    expect(calculateSnackPoints([], true)).toBe(1);
+    expect(calculateSnackPoints([{ id: "snack-1", eatenAt: "22:00", occurred: true, category: "large-or-late", amountLevel: "large", planned: false, beforeBed: true, note: "" }], true)).toBe(0);
+    expect(calculateFoodPoints(input)).toBe(20);
+  });
+
+  it("requires all digital-attention inputs instead of inventing screen time", () => {
+    expect(calculatePhonePoints({ entertainmentMinutes: null, separatedDuringWork: true, limitedMorningOrNightUse: true })).toBeNull();
+    expect(calculatePhonePoints({ entertainmentMinutes: 120, separatedDuringWork: true, limitedMorningOrNightUse: true })).toBe(8);
+    expect(calculatePhonePoints({ entertainmentMinutes: 121, separatedDuringWork: true, limitedMorningOrNightUse: true })).toBe(7);
+    expect(calculatePhonePoints({ entertainmentMinutes: 240, separatedDuringWork: false, limitedMorningOrNightUse: true })).toBe(3);
+    expect(calculatePhonePoints({ entertainmentMinutes: 241, separatedDuringWork: false, limitedMorningOrNightUse: false })).toBe(0);
+  });
+
+  it("preserves recorded zeroes and distinguishes them from missing values", () => {
     const input = emptyLog();
     input.sleep.pixelWatchScore = 0;
+    input.result.confirmedAchievementScore = 0;
     expect(calculateScores(input).sleep).toBe(0);
+    expect(calculateScores(input).total).toBe(0);
     expect(calculateScores(emptyLog()).sleep).toBeNull();
+    expect(calculateScores(emptyLog()).total).toBeNull();
   });
 
   it("keeps one memory row for the same client request id", async () => {

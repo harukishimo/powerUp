@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { accessError, errorResponse, readJsonBody, RequestBodyTooLargeError, requestId } from "@/lib/http";
 import { getTodayJst, isValidDateString, shiftDate } from "@/lib/date";
-import { calculateScores } from "@/lib/scoring";
+import { calculateScores, SCORE_VERSION } from "@/lib/scoring";
 import { getStorage } from "@/lib/storage";
 import { SaveLogRequestSchema } from "@/lib/validation";
 
@@ -33,8 +33,9 @@ export async function POST(request: Request) {
   if (denied) return denied;
   try {
     const parsed = SaveLogRequestSchema.parse(await readJsonBody(request));
-    const scores = calculateScores(parsed);
-    const log = await getStorage().upsert(parsed, scores, parsed.clientRequestId);
+    const input = { ...parsed, scoreVersion: SCORE_VERSION };
+    const scores = calculateScores(input);
+    const log = await getStorage().upsert(input, scores, parsed.clientRequestId);
     return NextResponse.json({ saved: true, clientRequestId: parsed.clientRequestId, log }, { headers: { "x-request-id": id, "cache-control": "no-store" } });
   } catch (error) {
     if (error instanceof SyntaxError) return NextResponse.json({ error: "JSON形式が正しくありません。", requestId: id }, { status: 400 });

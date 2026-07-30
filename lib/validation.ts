@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { isValidDateString } from "@/lib/date";
+import { SCORE_MAX } from "@/lib/scoring";
 
 const nullableInt = (min: number, max: number) => z.number().int().min(min).max(max).nullable();
 const dateString = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isValidDateString, "有効な日付を入力してください。");
@@ -79,9 +80,9 @@ export const AiScoreRequestSchema = z.object({
   focusMinutes: nullableInt(0, 1440),
   foodSummary: z.record(z.string().max(80), z.string().max(240)).refine((value) => Object.keys(value).length <= 12, "食事概要が多すぎます。"),
   deterministicScores: z.object({
-    sleep: nullableInt(0, 50),
-    food: nullableInt(0, 30),
-    phone: nullableInt(0, 10),
+    sleep: nullableInt(0, SCORE_MAX.sleep),
+    food: nullableInt(0, SCORE_MAX.food),
+    phone: nullableInt(0, SCORE_MAX.phone),
   }),
 });
 
@@ -100,11 +101,11 @@ export const SaveLogRequestSchema = DailyLogInputSchema.extend({
 });
 
 const ScoreBreakdownSchema = z.object({
-  sleep: z.number().int().min(0).max(50).nullable(),
-  food: z.number().int().min(0).max(30).nullable(),
-  phone: z.number().int().min(0).max(10).nullable(),
-  result: z.number().int().min(0).max(10).nullable(),
-  total: z.number().int().min(0).max(100).nullable(),
+  sleep: z.number().int().min(0).max(SCORE_MAX.sleep).nullable(),
+  food: z.number().int().min(0).max(SCORE_MAX.food).nullable(),
+  phone: z.number().int().min(0).max(SCORE_MAX.phone).nullable(),
+  result: z.number().int().min(0).max(SCORE_MAX.result).nullable(),
+  total: z.number().int().min(0).max(SCORE_MAX.total).nullable(),
   recordedPoints: z.number().int().min(0).max(100),
   recordedMax: z.number().int().min(0).max(100),
   recordingRate: z.number().int().min(0).max(100),
@@ -126,10 +127,10 @@ export const DailyLogSummarySchema = z.object({
   totalScore: z.number().int().min(0).max(100).nullable(),
   recordingRate: z.number().int().min(0).max(100),
   scores: z.object({
-    sleep: z.number().int().min(0).max(50).nullable(),
-    food: z.number().int().min(0).max(30).nullable(),
-    phone: z.number().int().min(0).max(10).nullable(),
-    result: z.number().int().min(0).max(10).nullable(),
+    sleep: z.number().int().min(0).max(SCORE_MAX.sleep).nullable(),
+    food: z.number().int().min(0).max(SCORE_MAX.food).nullable(),
+    phone: z.number().int().min(0).max(SCORE_MAX.phone).nullable(),
+    result: z.number().int().min(0).max(SCORE_MAX.result).nullable(),
   }),
   status: z.enum(["draft", "proposed", "confirmed"]),
 });

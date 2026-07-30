@@ -1,4 +1,4 @@
-import { calculateScores } from "@/lib/scoring";
+import { calculateScores, SCORE_VERSION } from "@/lib/scoring";
 import type { DailyLog, DailyLogInput, MealInput } from "@/types/domain";
 
 const meal = (type: MealInput["type"], options: Partial<MealInput>): MealInput => ({
@@ -73,7 +73,7 @@ export function createDemoInput(date: string): DailyLogInput {
       comment: "昼食後は少し眠かったが、午後に集中を取り戻せた。",
       confirmedAchievementScore: 4,
     },
-    scoreVersion: "v1",
+    scoreVersion: SCORE_VERSION,
   };
 }
 
@@ -106,7 +106,7 @@ export function createBlankLog(date: string): DailyLog {
     snackRecorded: false,
     phone: { entertainmentMinutes: null, separatedDuringWork: null, limitedMorningOrNightUse: null },
     result: { achievementText: "", focusMinutes: null, reflectionRating: null, comment: "", confirmedAchievementScore: null },
-    scoreVersion: "v1",
+    scoreVersion: SCORE_VERSION,
   };
   const now = new Date().toISOString();
   return {

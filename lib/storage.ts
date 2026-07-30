@@ -1,6 +1,7 @@
 import { isSheetsConfigured } from "@/lib/config";
 import { createDemoLog } from "@/lib/demo-data";
 import { getTodayJst, shiftDate } from "@/lib/date";
+import { calculateScores, SCORE_VERSION } from "@/lib/scoring";
 import { SheetsStorage } from "@/lib/sheets";
 import type { LogStorage } from "@/lib/storage-types";
 import type { AiInsight, DailyLog, DailyLogInput, DailyLogSummary, ScoreBreakdown } from "@/types/domain";
@@ -10,17 +11,27 @@ const memory = globalThis as typeof globalThis & {
 };
 
 function summary(log: DailyLog): DailyLogSummary {
+  const current = refreshLog(log);
   return {
-    date: log.date,
-    totalScore: log.scores.total,
-    recordingRate: log.scores.recordingRate,
+    date: current.date,
+    totalScore: current.scores.total,
+    recordingRate: current.scores.recordingRate,
     scores: {
-      sleep: log.scores.sleep,
-      food: log.scores.food,
-      phone: log.scores.phone,
-      result: log.scores.result,
+      sleep: current.scores.sleep,
+      food: current.scores.food,
+      phone: current.scores.phone,
+      result: current.scores.result,
     },
-    status: log.status,
+    status: current.status,
+  };
+}
+
+function refreshLog(log: DailyLog): DailyLog {
+  const input: DailyLogInput = { ...log, scoreVersion: SCORE_VERSION };
+  return {
+    ...log,
+    scoreVersion: SCORE_VERSION,
+    scores: calculateScores(input),
   };
 }
 
@@ -46,7 +57,8 @@ export class MemoryStorage implements LogStorage {
   }
 
   async get(date: string) {
-    return this.logs.get(date) ?? null;
+    const log = this.logs.get(date);
+    return log ? refreshLog(log) : null;
   }
 
   async upsert(input: DailyLogInput, scores: ScoreBreakdown, clientRequestId: string) {

@@ -108,7 +108,7 @@ GET /api/logs?from=2026-07-23&to=2026-07-29
       "date": "2026-07-29",
       "totalScore": 82,
       "recordingRate": 100,
-      "scores": { "sleep": 41, "food": 26, "phone": 7, "result": 8 },
+      "scores": { "sleep": 24, "food": 17, "phone": 7, "result": 82 },
       "status": "confirmed"
     }
   ],
@@ -126,7 +126,7 @@ GET /api/logs?from=2026-07-23&to=2026-07-29
 {
   "date": "2026-07-29",
   "status": "confirmed",
-  "scores": { "sleep": 41, "food": 26, "phone": 7, "result": 8, "total": 82 },
+  "scores": { "sleep": 24, "food": 17, "phone": 7, "result": 82, "total": 82 },
   "sleep": { "pixelWatchScore": 82, "recoveryFeeling": 4 },
   "meals": [],
   "snacks": [],
@@ -167,7 +167,7 @@ GET /api/logs?from=2026-07-23&to=2026-07-29
     "comment": "午後は集中しやすかった。"
   },
   "confirmedAchievementScore": 4,
-  "scoreVersion": "v1"
+  "scoreVersion": "v2"
 }
 ```
 
@@ -181,7 +181,7 @@ GET /api/logs?from=2026-07-23&to=2026-07-29
     "date": "2026-07-29",
     "totalScore": 82,
     "recordingRate": 100,
-    "scores": { "sleep": 41, "food": 26, "phone": 7, "result": 8 }
+    "scores": { "sleep": 24, "food": 17, "phone": 7, "result": 82 }
   }
 }
 ```
@@ -197,7 +197,7 @@ GET /api/logs?from=2026-07-23&to=2026-07-29
   "reflectionRating": 4,
   "focusMinutes": 75,
   "foodSummary": { "lunch": "甘い飲料あり、食後歩行なし" },
-  "deterministicScores": { "sleep": 41, "food": 26, "phone": 7 }
+  "deterministicScores": { "sleep": 24, "food": 17, "phone": 7 }
 }
 ```
 

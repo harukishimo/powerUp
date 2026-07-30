@@ -1,6 +1,11 @@
 import { google, sheets_v4 } from "googleapis";
 import { config } from "@/lib/config";
-import { calculateMealPoints, calculateSnackItemPoints } from "@/lib/scoring";
+import {
+  calculateMealPoints,
+  calculateScores,
+  calculateSnackItemPoints,
+  SCORE_VERSION,
+} from "@/lib/scoring";
 import { DailyLogInputSchema } from "@/lib/validation";
 import type { LogStorage } from "@/lib/storage-types";
 import type { AiInsight, DailyLog, DailyLogInput, DailyLogSummary, MealInput, ScoreBreakdown, SnackInput } from "@/types/domain";
@@ -180,16 +185,16 @@ export class SheetsStorage implements LogStorage {
       .map((row) => rowToObject(headers, row))
       .filter((row) => row.log_date >= from && row.log_date <= to)
       .map((row) => {
-        const payload = parsePayload(row.payload_json);
+        const payload = refreshLog(parsePayload(row.payload_json));
         return {
           date: row.log_date,
-          totalScore: numberOrNull(row.total_score) ?? payload?.scores.total ?? null,
-          recordingRate: Number(row.recording_rate || payload?.scores.recordingRate || 0),
+          totalScore: payload?.scores.total ?? numberOrNull(row.total_score),
+          recordingRate: payload?.scores.recordingRate ?? Number(row.recording_rate || 0),
           scores: {
-            sleep: numberOrNull(row.sleep_score) ?? payload?.scores.sleep ?? null,
-            food: numberOrNull(row.food_score) ?? payload?.scores.food ?? null,
-            phone: numberOrNull(row.phone_score) ?? payload?.scores.phone ?? null,
-            result: numberOrNull(row.result_score) ?? payload?.scores.result ?? null,
+            sleep: payload?.scores.sleep ?? numberOrNull(row.sleep_score),
+            food: payload?.scores.food ?? numberOrNull(row.food_score),
+            phone: payload?.scores.phone ?? numberOrNull(row.phone_score),
+            result: payload?.scores.result ?? numberOrNull(row.result_score),
           },
           status: payload?.status ?? "draft",
         };
@@ -202,7 +207,7 @@ export class SheetsStorage implements LogStorage {
     if (rows.length < 2) return null;
     const headers = rows[0];
     const row = rows.slice(1).map((value) => rowToObject(headers, value)).find((value) => value.log_date === date);
-    return row ? parsePayload(row.payload_json) : null;
+    return row ? refreshLog(parsePayload(row.payload_json)) : null;
   }
 
   async upsert(input: DailyLogInput, scores: ScoreBreakdown, clientRequestId: string): Promise<DailyLog> {
@@ -255,7 +260,7 @@ export class SheetsStorage implements LogStorage {
       date,
       insight.provider ?? "gemini",
       insight.model ?? config.geminiModel,
-      "v1",
+      SCORE_VERSION,
       cell(insight.achievementScore),
       insight.confidence,
       insight.reason,
@@ -340,6 +345,16 @@ function parsePayload(value: string | undefined): DailyLog | null {
   } catch {
     return null;
   }
+}
+
+function refreshLog(log: DailyLog | null): DailyLog | null {
+  if (!log) return null;
+  const input: DailyLogInput = { ...log, scoreVersion: SCORE_VERSION };
+  return {
+    ...log,
+    scoreVersion: SCORE_VERSION,
+    scores: calculateScores(input),
+  };
 }
 
 function numberOrNull(value: string | undefined) {
