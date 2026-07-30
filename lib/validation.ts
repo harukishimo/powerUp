@@ -56,7 +56,9 @@ export const DailyLogInputSchema = z.object({
     wakeTime: nullableTime,
     currentAlertness: nullableInt(1, 5),
     continuousWorkMinutes: nullableInt(0, 1440),
-    minutesUntilNextCommitment: nullableInt(0, 1440),
+    nextCommitmentTime: nullableTime.optional(),
+    // 旧形式の保存データを読み込むために受け付ける。新規入力では時刻から再計算する。
+    minutesUntilNextCommitment: nullableInt(0, 1440).optional(),
   }).optional(),
   result: z.object({
     achievementText: z.string().max(240),

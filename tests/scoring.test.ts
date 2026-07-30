@@ -5,6 +5,7 @@ import {
   calculateFocusPoints,
   calculateFoodPoints,
   calculateMealPoints,
+  calculateMinutesUntilNextCommitment,
   calculatePhonePoints,
   calculateReflectionPoints,
   calculateSnackItemPoints,
@@ -78,6 +79,13 @@ describe("scoring v2", () => {
     expect(calculateReflectionPoints(1)).toBe(0);
     expect(calculateReflectionPoints(3)).toBe(8);
     expect(calculateReflectionPoints(5)).toBe(15);
+  });
+
+  it("calculates the next-commitment gap from clock times", () => {
+    expect(calculateMinutesUntilNextCommitment("14:30", "15:15")).toBe(45);
+    expect(calculateMinutesUntilNextCommitment("23:50", "00:20")).toBe(30);
+    expect(calculateMinutesUntilNextCommitment("14:30", null)).toBeNull();
+    expect(calculateMinutesUntilNextCommitment(null, "15:15", 45)).toBe(45);
   });
 
   it("keeps a completely empty log unscored", () => {
@@ -183,7 +191,7 @@ describe("scoring v2", () => {
       wakeTime: "06:30",
       currentAlertness: 5,
       continuousWorkMinutes: 45,
-      minutesUntilNextCommitment: 120,
+      nextCommitmentTime: "15:00",
     };
     input.meals = [
       { ...completeMeal("breakfast"), eatenAt: "10:00", postMealSleepiness: 1 },

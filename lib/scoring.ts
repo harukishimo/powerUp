@@ -257,6 +257,24 @@ function timeToMinutes(value: string | null | undefined): number | null {
   return hours * 60 + minutes;
 }
 
+/**
+ * 評価時刻から、次の予定までの分数を算出する。
+ * 日付は入力させず、評価時刻より前の時刻は翌日の予定として扱う。
+ * 旧形式の分数は、時刻から算出できない保存データに限って使う。
+ */
+export function calculateMinutesUntilNextCommitment(
+  assessmentTime: string | null | undefined,
+  nextCommitmentTime: string | null | undefined,
+  legacyMinutes: number | null | undefined = null,
+): number | null {
+  const assessment = timeToMinutes(assessmentTime);
+  const next = timeToMinutes(nextCommitmentTime);
+  if (assessment !== null && next !== null) {
+    return (next - assessment + 1440) % 1440;
+  }
+  return legacyMinutes ?? null;
+}
+
 function interpolate(points: Array<[number, number]>, value: number) {
   if (value <= points[0][0]) return points[0][1];
   for (let index = 1; index < points.length; index += 1) {
@@ -354,9 +372,14 @@ function alertnessEstimate(input: DailyLogInput, reasons: string[]) {
 
 function workContextEstimate(input: DailyLogInput, reasons: string[]) {
   const values: Array<[number, number]> = [];
+  const assessment = input.performanceContext?.assessmentTime;
   const continuousWork = input.performanceContext?.continuousWorkMinutes ?? null;
   const untilNextCommitment =
-    input.performanceContext?.minutesUntilNextCommitment ?? null;
+    calculateMinutesUntilNextCommitment(
+      assessment,
+      input.performanceContext?.nextCommitmentTime,
+      input.performanceContext?.minutesUntilNextCommitment,
+    );
 
   if (continuousWork !== null) {
     values.push([

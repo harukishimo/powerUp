@@ -71,7 +71,7 @@ export function createDemoInput(date: string): DailyLogInput {
       wakeTime: "06:45",
       currentAlertness: 3,
       continuousWorkMinutes: 75,
-      minutesUntilNextCommitment: 45,
+      nextCommitmentTime: "15:15",
     },
     result: {
       achievementText: "企画書の構成を完成させ、上司にレビュー依頼を送った。",

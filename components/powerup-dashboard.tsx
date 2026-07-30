@@ -48,6 +48,7 @@ function inputFromLog(log: DailyLog, assessmentTime: string): DailyLogInput {
       wakeTime: log.performanceContext?.wakeTime ?? null,
       currentAlertness: log.performanceContext?.currentAlertness ?? null,
       continuousWorkMinutes: log.performanceContext?.continuousWorkMinutes ?? null,
+      nextCommitmentTime: log.performanceContext?.nextCommitmentTime ?? null,
       minutesUntilNextCommitment:
         log.performanceContext?.minutesUntilNextCommitment ?? null,
     },
@@ -222,6 +223,7 @@ function Editor({ input, scores, aiInsight, aiLoading, saving, message, error, u
     wakeTime: null,
     currentAlertness: null,
     continuousWorkMinutes: null,
+    nextCommitmentTime: null,
     minutesUntilNextCommitment: null,
   };
   const saveActionsRef = useRef<HTMLDivElement>(null);
@@ -237,13 +239,24 @@ function Editor({ input, scores, aiInsight, aiLoading, saving, message, error, u
     return () => observer.disconnect();
   }, []);
 
+  useEffect(() => {
+    const handleSaveShortcut = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key === "Enter") {
+        event.preventDefault();
+        void save();
+      }
+    };
+    window.addEventListener("keydown", handleSaveShortcut);
+    return () => window.removeEventListener("keydown", handleSaveShortcut);
+  }, [save]);
+
   return (
     <>
     <section className="card editor-card" id="settings">
       <div className="editor-heading">
         <div>
           <h2>記録を編集</h2>
-          <p>選択式中心。Geminiが配点案をつくり、最後はあなたが確定します。</p>
+          <p>選択式中心。Geminiが配点案をつくり、最後はあなたが確定します。⌘/Ctrl + Enterでも保存できます。</p>
         </div>
         <span className="ai-badge">Gemini API preview</span>
       </div>
@@ -260,8 +273,8 @@ function Editor({ input, scores, aiInsight, aiLoading, saving, message, error, u
           <Field label="連続して作業した時間（分）">
             <input type="number" min="0" max="1440" value={performanceContext.continuousWorkMinutes ?? ""} placeholder="例：75" onChange={(event) => updateInput({ performanceContext: { ...performanceContext, continuousWorkMinutes: event.target.value === "" ? null : Number(event.target.value) } })} />
           </Field>
-          <Field label="次の予定まで（分）">
-            <input type="number" min="0" max="1440" value={performanceContext.minutesUntilNextCommitment ?? ""} placeholder="例：45" onChange={(event) => updateInput({ performanceContext: { ...performanceContext, minutesUntilNextCommitment: event.target.value === "" ? null : Number(event.target.value) } })} />
+          <Field label="次の予定の時刻">
+            <input type="time" value={performanceContext.nextCommitmentTime ?? ""} onChange={(event) => updateInput({ performanceContext: { ...performanceContext, nextCommitmentTime: event.target.value || null, minutesUntilNextCommitment: null } })} />
           </Field>
         </div>
         <div className="field" style={{ marginTop: 12 }}>
@@ -269,7 +282,7 @@ function Editor({ input, scores, aiInsight, aiLoading, saving, message, error, u
           <ChoiceGroup name="current-alertness" value={performanceContext.currentAlertness?.toString() ?? ""} options={["1", "2", "3", "4", "5"]} labels={["1", "2", "3", "4", "5"]} onChange={(value) => updateInput({ performanceContext: { ...performanceContext, currentAlertness: value ? Number(value) : null } })} />
           <ScaleGuide low="1 かなり眠い" middle="3 普通" high="5 とても冴えている" />
         </div>
-        <p className="help-text">起床後の経過、現在の覚醒感、連続作業、次の予定までの余白で、同じ日の中の上下を反映します。実績スコアには加算しません。</p>
+        <p className="help-text">起床後の経過、現在の覚醒感、連続作業、評価時刻から次の予定までの時間で、同じ日の中の上下を反映します。次の予定が日付をまたぐ場合も自動計算します。実績スコアには加算しません。</p>
       </div>
 
       <div className="editor-section">

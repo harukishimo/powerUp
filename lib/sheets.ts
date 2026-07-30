@@ -5,6 +5,7 @@ import {
   calculateEstimatedPerformance,
   calculateFocusPoints,
   calculateMealPoints,
+  calculateMinutesUntilNextCommitment,
   calculateReflectionPoints,
   calculateScores,
   calculateSnackItemPoints,
@@ -49,6 +50,7 @@ const DAILY_HEADERS = [
   "estimate_coverage",
   "estimate_version",
   "assessment_time",
+  "next_commitment_time",
   "wake_time",
   "current_alertness",
   "continuous_work_minutes",
@@ -344,6 +346,11 @@ export class SheetsStorage implements LogStorage {
 
 function dailyRow(log: DailyLog) {
   const estimate = calculateEstimatedPerformance(log);
+  const minutesUntilNextCommitment = calculateMinutesUntilNextCommitment(
+    log.performanceContext?.assessmentTime,
+    log.performanceContext?.nextCommitmentTime,
+    log.performanceContext?.minutesUntilNextCommitment,
+  );
   return [
     log.id,
     USER_KEY,
@@ -379,10 +386,11 @@ function dailyRow(log: DailyLog) {
     cell(estimate.coverage),
     estimate.version,
     cell(log.performanceContext?.assessmentTime),
+    cell(log.performanceContext?.nextCommitmentTime),
     cell(log.performanceContext?.wakeTime),
     cell(log.performanceContext?.currentAlertness),
     cell(log.performanceContext?.continuousWorkMinutes),
-    cell(log.performanceContext?.minutesUntilNextCommitment),
+    cell(minutesUntilNextCommitment),
     JSON.stringify(estimate.components),
     JSON.stringify(estimate.reasons),
   ];

@@ -54,7 +54,10 @@ export interface PerformanceContextInput {
   wakeTime: string | null;
   currentAlertness: number | null;
   continuousWorkMinutes: number | null;
-  minutesUntilNextCommitment: number | null;
+  /** ユーザーが入力する次の予定の時刻。 */
+  nextCommitmentTime?: string | null;
+  /** 旧形式互換。新規入力・採点では nextCommitmentTime を優先する。 */
+  minutesUntilNextCommitment?: number | null;
 }
 
 export interface ResultInput {
