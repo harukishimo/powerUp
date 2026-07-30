@@ -180,7 +180,7 @@ export function PowerUpDashboard({ initialLog, initialSummaries, initialAssessme
     <main className="page-content">
       <div className="page-heading">
         <div><p className="eyebrow">{new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(new Date(`${input.date}T12:00:00+09:00`)).toUpperCase()}</p><h1>今日のパフォーマンス</h1><p>成果と集中を測り、睡眠・食事・デジタル環境との関係を振り返ります。</p></div>
-        <div className="date-chip">◷ <span>{input.date}</span></div>
+        <div className="page-heading-actions"><div className="date-chip">◷ <span>{input.date}</span></div><button className="ghost-button reload-button" type="button" onClick={() => window.location.reload()} title="ページを再読み込みします">↻ 再読み込み</button></div>
       </div>
       {configurationWarning ? <div className="warning-banner"><span aria-hidden="true">!</span><div><strong>確認用モード</strong><span>Google Sheets未接続のため、表示と保存は確認用です。Vercel環境変数を設定すると実データを保存できます。</span></div></div> : null}
       <section className="card score-hero" aria-label="現在時点の推定パフォーマンス">
