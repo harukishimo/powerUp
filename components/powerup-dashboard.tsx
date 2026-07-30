@@ -174,7 +174,7 @@ export function PowerUpDashboard({ initialLog, initialSummaries, initialAssessme
         : "現時点のコンディションからの見込みです。";
   const scoreSubline =
     estimate.score !== null
-      ? `${estimate.asOf ?? "時刻未記録"}時点 · カバー率 ${estimate.coverage}% · ${estimateSources} · 実績ではありません`
+      ? `${estimate.asOf ?? "時刻未記録"}時点 · カバー率 ${estimate.coverage}% · ${estimateSources}${estimate.interactionBonus > 0 ? ` · 睡眠×覚醒感 +${estimate.interactionBonus}点（実験的）` : ""} · 実績ではありません`
       : "未入力は0点にせず、中立値へ縮約します";
 
   return (

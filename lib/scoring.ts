@@ -24,7 +24,9 @@ export const PERFORMANCE_WEIGHTS = {
   reflection: 15,
 } as const;
 
-export const ESTIMATE_VERSION = "current-condition-v2";
+export const ESTIMATE_VERSION = "current-condition-v3";
+
+export const SLEEP_ALERTNESS_INTERACTION_MAX = 3;
 
 export const ESTIMATED_PERFORMANCE_WEIGHTS = {
   sleep: 30,
@@ -50,6 +52,7 @@ export interface EstimatedPerformance {
   inputs: EstimateInput[];
   version: typeof ESTIMATE_VERSION;
   asOf: string | null;
+  interactionBonus: number;
   components: Record<EstimateInput, EstimateComponent>;
   reasons: string[];
 }
@@ -600,6 +603,51 @@ function digitalEstimate(input: DailyLogInput, reasons: string[]) {
   );
 }
 
+function calculateSleepAlertnessInteractionBonus(
+  input: DailyLogInput,
+  components: Record<EstimateInput, EstimateComponent>,
+) {
+  const pixelWatchScore = input.sleep.pixelWatchScore;
+  const alertness = input.performanceContext?.currentAlertness ?? null;
+  const assessment = timeToMinutes(input.performanceContext?.assessmentTime);
+  const wake = timeToMinutes(input.performanceContext?.wakeTime);
+  if (
+    pixelWatchScore === null
+    || alertness === null
+    || assessment === null
+    || wake === null
+  ) {
+    return 0;
+  }
+
+  const minutesAwake = assessment >= wake ? assessment - wake : assessment + 1440 - wake;
+  const sleepFactor = clamp((pixelWatchScore - 75) / 25, 0, 1);
+  const alertnessFactor = clamp((alertness - 3) / 2, 0, 1);
+  const timingFactor =
+    minutesAwake < 60 || minutesAwake >= 360
+      ? 0
+      : minutesAwake < 120
+        ? (minutesAwake - 60) / 60
+        : minutesAwake <= 240
+          ? 1
+          : (360 - minutesAwake) / 120;
+  const rawBonus =
+    SLEEP_ALERTNESS_INTERACTION_MAX * sleepFactor * alertnessFactor * timingFactor;
+  const currentSleepAlertnessContribution =
+    components.sleep.effectiveScore * (components.sleep.weight / 100)
+    + components.alertness.effectiveScore * (components.alertness.weight / 100);
+  const componentHeadroom = Math.max(
+    0,
+    ESTIMATED_PERFORMANCE_WEIGHTS.sleep
+      + ESTIMATED_PERFORMANCE_WEIGHTS.alertness
+      - currentSleepAlertnessContribution,
+  );
+
+  return Math.round(
+    Math.min(rawBonus, componentHeadroom, SLEEP_ALERTNESS_INTERACTION_MAX) * 10,
+  ) / 10;
+}
+
 export function calculateEstimatedPerformance(input: DailyLogInput): EstimatedPerformance {
   const reasons: string[] = [];
   const components: Record<EstimateInput, EstimateComponent> = {
@@ -612,14 +660,21 @@ export function calculateEstimatedPerformance(input: DailyLogInput): EstimatedPe
   };
   const entries = Object.entries(components) as Array<[EstimateInput, EstimateComponent]>;
   const hasEvidence = entries.some(([, component]) => component.score !== null);
-  const score = hasEvidence
-    ? round(
-        entries.reduce(
-          (total, [, component]) => total + component.effectiveScore * component.weight,
-          0,
-        ) / 100,
-      )
+  const baseScore = hasEvidence
+    ? entries.reduce(
+        (total, [, component]) => total + component.effectiveScore * component.weight,
+        0,
+      ) / 100
     : null;
+  const interactionBonus =
+    baseScore === null ? 0 : calculateSleepAlertnessInteractionBonus(input, components);
+  const score =
+    baseScore === null ? null : round(clamp(baseScore + interactionBonus, 0, 100));
+  if (interactionBonus > 0) {
+    reasons.unshift(
+      `良好な睡眠・高い覚醒感・起床後時間の一致を実験的に +${interactionBonus}点`,
+    );
+  }
 
   return {
     score,
@@ -634,6 +689,7 @@ export function calculateEstimatedPerformance(input: DailyLogInput): EstimatedPe
       .map(([key]) => key),
     version: ESTIMATE_VERSION,
     asOf: input.performanceContext?.assessmentTime ?? null,
+    interactionBonus,
     components,
     reasons: [...new Set(reasons)].slice(0, 4),
   };

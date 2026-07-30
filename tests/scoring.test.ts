@@ -196,6 +196,7 @@ describe("scoring v2", () => {
       inputs: [],
       version: ESTIMATE_VERSION,
       asOf: null,
+      interactionBonus: 0,
     });
 
     const input = emptyLog();
@@ -237,6 +238,68 @@ describe("scoring v2", () => {
       version: ESTIMATE_VERSION,
       asOf: "13:00",
     });
+  });
+
+  it("adds only a small, time-limited sleep and alertness interaction", () => {
+    const input = emptyLog();
+    input.sleep = { pixelWatchScore: 100, recoveryFeeling: null };
+    input.performanceContext = {
+      assessmentTime: "08:00",
+      wakeTime: "06:00",
+      currentAlertness: 5,
+      continuousWorkMinutes: null,
+      nextCommitmentTime: null,
+    };
+
+    const peak = calculateEstimatedPerformance(input);
+    expect(peak).toMatchObject({
+      score: 77,
+      interactionBonus: 3,
+    });
+    expect(peak.reasons[0]).toContain("実験的に +3点");
+
+    input.performanceContext.assessmentTime = "07:30";
+    expect(calculateEstimatedPerformance(input).interactionBonus).toBe(1.5);
+
+    input.performanceContext.assessmentTime = "10:00";
+    expect(calculateEstimatedPerformance(input).interactionBonus).toBe(3);
+
+    input.performanceContext.assessmentTime = "11:00";
+    expect(calculateEstimatedPerformance(input).interactionBonus).toBe(1.5);
+
+    input.performanceContext.assessmentTime = "12:00";
+    expect(calculateEstimatedPerformance(input).interactionBonus).toBe(0);
+
+    input.performanceContext.assessmentTime = "06:30";
+    expect(calculateEstimatedPerformance(input).interactionBonus).toBe(0);
+  });
+
+  it("does not add sleep synergy without all required evidence or above its safe bounds", () => {
+    const input = emptyLog();
+    input.sleep = { pixelWatchScore: 75, recoveryFeeling: null };
+    input.performanceContext = {
+      assessmentTime: "08:00",
+      wakeTime: "06:00",
+      currentAlertness: 5,
+      continuousWorkMinutes: null,
+      nextCommitmentTime: null,
+    };
+
+    expect(calculateEstimatedPerformance(input).interactionBonus).toBe(0);
+
+    input.sleep.pixelWatchScore = 100;
+    input.performanceContext.currentAlertness = 3;
+    expect(calculateEstimatedPerformance(input).interactionBonus).toBe(0);
+
+    input.performanceContext.currentAlertness = 5;
+    input.performanceContext.wakeTime = null;
+    expect(calculateEstimatedPerformance(input).interactionBonus).toBe(0);
+
+    input.performanceContext.wakeTime = "06:00";
+    input.sleep.recoveryFeeling = 5;
+    const capped = calculateEstimatedPerformance(input);
+    expect(capped.interactionBonus).toBe(0);
+    expect(capped.score).toBeLessThanOrEqual(100);
   });
 
   it("prioritizes a recorded post-meal response over meal proxies", () => {

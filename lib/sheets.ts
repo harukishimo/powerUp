@@ -11,6 +11,7 @@ import {
   calculateScores,
   calculateSnackItemPoints,
   SCORE_VERSION,
+  SLEEP_ALERTNESS_INTERACTION_MAX,
 } from "@/lib/scoring";
 import { DailyLogInputSchema } from "@/lib/validation";
 import type { LogStorage } from "@/lib/storage-types";
@@ -392,7 +393,14 @@ function dailyRow(log: DailyLog) {
     cell(log.performanceContext?.currentAlertness),
     cell(log.performanceContext?.continuousWorkMinutes),
     cell(minutesUntilNextCommitment),
-    JSON.stringify(estimate.components),
+    JSON.stringify({
+      ...estimate.components,
+      sleepAlertnessInteraction: {
+        bonus: estimate.interactionBonus,
+        max: SLEEP_ALERTNESS_INTERACTION_MAX,
+        experimental: true,
+      },
+    }),
     JSON.stringify(estimate.reasons),
   ];
 }
