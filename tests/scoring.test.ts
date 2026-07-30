@@ -20,7 +20,7 @@ import type { DailyLogInput, MealInput } from "@/types/domain";
 import { MemoryStorage } from "@/lib/storage";
 import { AiInsightSchema, DailyLogInputSchema } from "@/lib/validation";
 import { fallbackAiScore } from "@/lib/gemini";
-import { isValidDateString } from "@/lib/date";
+import { formatJstIso, formatJstTime, isValidDateString, normalizeTimelineEvents } from "@/lib/date";
 import { buildWeeklyTrend } from "@/lib/trend";
 
 const blankMeal = (type: MealInput["type"]): MealInput => ({
@@ -86,6 +86,20 @@ describe("scoring v2", () => {
     expect(calculateMinutesUntilNextCommitment("23:50", "00:20")).toBe(30);
     expect(calculateMinutesUntilNextCommitment("14:30", null)).toBeNull();
     expect(calculateMinutesUntilNextCommitment(null, "15:15", 45)).toBe(45);
+  });
+
+  it("formats generated timestamps in JST and migrates legacy save events", () => {
+    expect(formatJstTime("2026-07-30T00:00:00.000Z")).toBe("09:00");
+    expect(formatJstIso("2026-07-30T00:00:00.000Z")).toBe("2026-07-30T09:00:00.000+09:00");
+
+    const normalized = normalizeTimelineEvents("2026-07-30", [
+      { time: "00:00", label: "日次ログを保存", detail: "legacy" },
+      { time: "08:00", label: "睡眠を記録" },
+    ]);
+
+    expect(normalized[0]).toMatchObject({ time: "09:00", timeZone: "Asia/Tokyo" });
+    expect(normalized[1]).toEqual({ time: "08:00", label: "睡眠を記録" });
+    expect(normalizeTimelineEvents("2026-07-30", normalized)).toEqual(normalized);
   });
 
   it("keeps a completely empty log unscored", () => {

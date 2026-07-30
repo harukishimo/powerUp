@@ -119,6 +119,7 @@ export interface TimelineEvent {
   time: string;
   label: string;
   detail?: string;
+  timeZone?: "Asia/Tokyo";
 }
 
 export interface DailyLogSummary {

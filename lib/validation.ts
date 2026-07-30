@@ -122,7 +122,7 @@ const ScoreBreakdownSchema = z.object({
   provisional: z.boolean(),
 });
 
-const TimelineEventSchema = z.object({ time: z.string().max(20), label: z.string().max(120), detail: z.string().max(240).optional() });
+const TimelineEventSchema = z.object({ time: z.string().max(20), label: z.string().max(120), detail: z.string().max(240).optional(), timeZone: z.literal("Asia/Tokyo").optional() });
 export const DailyLogSchema = DailyLogInputSchema.extend({
   id: z.string().min(1).max(120),
   status: z.enum(["draft", "proposed", "confirmed"]),

@@ -1,6 +1,6 @@
 import { isSheetsConfigured } from "@/lib/config";
 import { createDemoLog } from "@/lib/demo-data";
-import { getTodayJst, shiftDate } from "@/lib/date";
+import { formatJstTime, getTodayJst, JAPAN_TIME_ZONE, normalizeLogTimestamps, nowJstIso, shiftDate } from "@/lib/date";
 import { calculateScores, SCORE_VERSION } from "@/lib/scoring";
 import { SheetsStorage } from "@/lib/sheets";
 import type { LogStorage } from "@/lib/storage-types";
@@ -27,9 +27,10 @@ function summary(log: DailyLog): DailyLogSummary {
 }
 
 function refreshLog(log: DailyLog): DailyLog {
-  const input: DailyLogInput = { ...log, scoreVersion: SCORE_VERSION };
+  const normalized = normalizeLogTimestamps(log);
+  const input: DailyLogInput = { ...normalized, scoreVersion: SCORE_VERSION };
   return {
-    ...log,
+    ...normalized,
     scoreVersion: SCORE_VERSION,
     scores: calculateScores(input),
   };
@@ -65,15 +66,16 @@ export class MemoryStorage implements LogStorage {
     const previousRequest = this.requestResults.get(clientRequestId);
     if (previousRequest) return previousRequest;
     const existing = this.logs.get(input.date);
-    const now = new Date().toISOString();
+    const normalizedExisting = existing ? normalizeLogTimestamps(existing) : undefined;
+    const now = nowJstIso();
     const log: DailyLog = {
       ...input,
-      id: existing?.id ?? `log-${input.date}`,
+      id: normalizedExisting?.id ?? `log-${input.date}`,
       status: input.aiInsight?.confirmed ? "confirmed" : "draft",
       scores,
-      createdAt: existing?.createdAt ?? now,
+      createdAt: normalizedExisting?.createdAt ?? now,
       updatedAt: now,
-      timeline: existing?.timeline ?? [{ time: now.slice(11, 16), label: "日次ログを保存", detail: clientRequestId }],
+      timeline: normalizedExisting?.timeline ?? [{ time: formatJstTime(now) ?? "—", label: "日次ログを保存", detail: clientRequestId, timeZone: JAPAN_TIME_ZONE }],
     };
     this.logs.set(input.date, log);
     this.requestResults.set(clientRequestId, log);
@@ -83,8 +85,9 @@ export class MemoryStorage implements LogStorage {
   async saveAiInsight(date: string, insight: AiInsight) {
     const existing = this.logs.get(date);
     if (!existing) return null;
-    const input: DailyLogInput = { ...existing, aiInsight: { ...insight, confirmed: true } };
-    const result = { ...existing, ...input, status: "confirmed" as const, updatedAt: new Date().toISOString() };
+    const normalizedExisting = normalizeLogTimestamps(existing);
+    const input: DailyLogInput = { ...normalizedExisting, aiInsight: { ...insight, confirmed: true } };
+    const result = { ...normalizedExisting, ...input, status: "confirmed" as const, updatedAt: nowJstIso() };
     this.logs.set(date, result);
     return result;
   }

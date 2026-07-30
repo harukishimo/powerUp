@@ -1,5 +1,6 @@
 import { google, sheets_v4 } from "googleapis";
 import { config } from "@/lib/config";
+import { formatJstTime, JAPAN_TIME_ZONE, normalizeLogTimestamps, nowJstIso } from "@/lib/date";
 import {
   calculateAchievementPoints,
   calculateEstimatedPerformance,
@@ -290,7 +291,7 @@ export class SheetsStorage implements LogStorage {
     });
     const existing = await this.get(parsed.date);
     if (existing?.clientRequestId === clientRequestId) return existing;
-    const now = new Date().toISOString();
+    const now = nowJstIso();
     const log: DailyLog = {
       ...parsed,
       id: existing?.id ?? `log-${parsed.date}`,
@@ -298,7 +299,7 @@ export class SheetsStorage implements LogStorage {
       scores,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
-      timeline: [...(existing?.timeline ?? []), { time: now.slice(11, 16), label: "日次ログを保存", detail: clientRequestId }].slice(-12),
+      timeline: [...(existing?.timeline ?? []), { time: formatJstTime(now) ?? "—", label: "日次ログを保存", detail: clientRequestId, timeZone: JAPAN_TIME_ZONE }].slice(-12),
     };
 
     await this.upsertRow("daily_logs", DAILY_HEADERS, "log_date", parsed.date, dailyRow(log));
@@ -316,7 +317,7 @@ export class SheetsStorage implements LogStorage {
   async saveAiInsight(date: string, insight: AiInsight): Promise<DailyLog | null> {
     const existing = await this.get(date);
     if (!existing) return null;
-    const now = new Date().toISOString();
+    const now = nowJstIso();
     const confirmed = insight.confirmed === true;
     const updated: DailyLog = {
       ...existing,
@@ -414,7 +415,7 @@ function mealRow(date: string, meal: MealInput) {
     cell(meal.postMealSleepiness),
     cell(mealScore),
     "rule",
-    new Date().toISOString(),
+    nowJstIso(),
   ];
 }
 
@@ -431,8 +432,8 @@ function snackRow(date: string, snack: SnackInput, snackId: string) {
     cell(snack.beforeBed),
     cell(calculateSnackItemPoints(snack)),
     snack.note,
-    new Date().toISOString(),
-    new Date().toISOString(),
+    nowJstIso(),
+    nowJstIso(),
   ];
 }
 
@@ -447,9 +448,10 @@ function parsePayload(value: string | undefined): DailyLog | null {
 
 function refreshLog(log: DailyLog | null): DailyLog | null {
   if (!log) return null;
-  const input: DailyLogInput = { ...log, scoreVersion: SCORE_VERSION };
+  const normalized = normalizeLogTimestamps(log);
+  const input: DailyLogInput = { ...normalized, scoreVersion: SCORE_VERSION };
   return {
-    ...log,
+    ...normalized,
     scoreVersion: SCORE_VERSION,
     scores: calculateScores(input),
   };

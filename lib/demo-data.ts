@@ -1,4 +1,5 @@
 import { calculateScores, SCORE_VERSION } from "@/lib/scoring";
+import { nowJstIso } from "@/lib/date";
 import type { DailyLog, DailyLogInput, MealInput } from "@/types/domain";
 
 const meal = (type: MealInput["type"], options: Partial<MealInput>): MealInput => ({
@@ -115,7 +116,7 @@ export function createBlankLog(date: string): DailyLog {
     result: { achievementText: "", focusMinutes: null, reflectionRating: null, comment: "", confirmedAchievementScore: null },
     scoreVersion: SCORE_VERSION,
   };
-  const now = new Date().toISOString();
+  const now = nowJstIso();
   return {
     ...input,
     id: `log-${date}`,
