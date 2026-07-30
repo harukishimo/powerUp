@@ -4,6 +4,7 @@ import { SCORE_MAX } from "@/lib/scoring";
 
 const nullableInt = (min: number, max: number) => z.number().int().min(min).max(max).nullable();
 const dateString = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isValidDateString, "有効な日付を入力してください。");
+const nullableTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable();
 
 export const MealInputSchema = z.object({
   id: z.string().min(1).max(100).optional(),
@@ -50,6 +51,13 @@ export const DailyLogInputSchema = z.object({
     separatedDuringWork: z.boolean().nullable(),
     limitedMorningOrNightUse: z.boolean().nullable(),
   }),
+  performanceContext: z.object({
+    assessmentTime: nullableTime,
+    wakeTime: nullableTime,
+    currentAlertness: nullableInt(1, 5),
+    continuousWorkMinutes: nullableInt(0, 1440),
+    minutesUntilNextCommitment: nullableInt(0, 1440),
+  }).optional(),
   result: z.object({
     achievementText: z.string().max(240),
     focusMinutes: nullableInt(0, 1440),

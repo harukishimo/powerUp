@@ -17,7 +17,14 @@ import type { DailyLog, DailyLogInput, DailyLogSummary, FoodLevel, MealFeature, 
 
 const mealNames: Record<MealType, string> = { breakfast: "朝食", lunch: "昼食", dinner: "夕食" };
 const featureLabels: Record<Exclude<MealFeature, "normal">, string> = { noodle: "麺類", fried: "揚げ物", "eating-out": "外食", "double-staple": "主食の重ね食い" };
-const estimateInputLabels = { sleep: "睡眠", food: "食事", phone: "デジタル" } as const;
+const estimateInputLabels = {
+  sleep: "睡眠",
+  wake: "起床後",
+  alertness: "覚醒感",
+  work: "予定",
+  food: "直近の食事",
+  digital: "デジタル",
+} as const;
 
 function blankMeal(type: MealType): MealInput {
   return { type, eatenAt: null, carbohydrateLevel: null, proteinLevel: null, vegetableLevel: null, portionLevel: null, drinkType: null, features: ["normal"], walkMinutes: null, postMealSleepiness: null };
@@ -27,7 +34,7 @@ function blankSnack(date: string): SnackInput {
   return { id: `${date}-snack-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, eatenAt: null, occurred: true, category: null, amountLevel: null, planned: null, beforeBed: null, note: "" };
 }
 
-function inputFromLog(log: DailyLog): DailyLogInput {
+function inputFromLog(log: DailyLog, assessmentTime: string): DailyLogInput {
   return {
     date: log.date,
     sleep: log.sleep,
@@ -36,6 +43,14 @@ function inputFromLog(log: DailyLog): DailyLogInput {
     snacks: log.snacks,
     snackRecorded: log.snackRecorded,
     phone: log.phone,
+    performanceContext: {
+      assessmentTime,
+      wakeTime: log.performanceContext?.wakeTime ?? null,
+      currentAlertness: log.performanceContext?.currentAlertness ?? null,
+      continuousWorkMinutes: log.performanceContext?.continuousWorkMinutes ?? null,
+      minutesUntilNextCommitment:
+        log.performanceContext?.minutesUntilNextCommitment ?? null,
+    },
     result: log.result,
     aiInsight: log.aiInsight ?? null,
     scoreVersion: SCORE_VERSION,
@@ -50,8 +65,8 @@ function displayScore(value: number | null, max: number) {
   return value === null ? "未記録" : `${value} / ${max}`;
 }
 
-export function PowerUpDashboard({ initialLog, initialSummaries, configurationWarning = false }: { initialLog: DailyLog; initialSummaries: DailyLogSummary[]; configurationWarning?: boolean }) {
-  const [input, setInput] = useState<DailyLogInput>(() => inputFromLog(initialLog));
+export function PowerUpDashboard({ initialLog, initialSummaries, initialAssessmentTime, configurationWarning = false }: { initialLog: DailyLog; initialSummaries: DailyLogSummary[]; initialAssessmentTime: string; configurationWarning?: boolean }) {
+  const [input, setInput] = useState<DailyLogInput>(() => inputFromLog(initialLog, initialAssessmentTime));
   const [summaries, setSummaries] = useState(initialSummaries);
   const [aiInsight, setAiInsight] = useState(initialLog.aiInsight ?? null);
   const [aiLoading, setAiLoading] = useState(false);
@@ -98,7 +113,7 @@ export function PowerUpDashboard({ initialLog, initialSummaries, configurationWa
       const response = await fetch("/api/logs", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...input, aiInsight: aiInsight?.confirmed ? aiInsight : null, clientRequestId }) });
       const data = await parseApiResponse(response, SaveLogResponseSchema);
       pendingRequestId.current = undefined;
-      setInput(inputFromLog(data.log)); setAiInsight(data.log.aiInsight ?? null); setSummaries((current) => [summaryFromLog(data.log), ...current.filter((item) => item.date !== data.log.date)].sort((a, b) => b.date.localeCompare(a.date)));
+      setInput(inputFromLog(data.log, data.log.performanceContext?.assessmentTime ?? initialAssessmentTime)); setAiInsight(data.log.aiInsight ?? null); setSummaries((current) => [summaryFromLog(data.log), ...current.filter((item) => item.date !== data.log.date)].sort((a, b) => b.date.localeCompare(a.date)));
       setMessage("保存しました");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "保存できませんでした。入力は保持されています。");
@@ -130,43 +145,36 @@ export function PowerUpDashboard({ initialLog, initialSummaries, configurationWa
     setMessage("AIの採点案を採用しました。保存すると確定します。");
   }
 
-  const scoreMode =
-    scores.recordingRate === SCORE_MAX.total
-      ? "actual"
-      : estimate.score !== null
-        ? "estimated"
-        : scores.total !== null
-          ? "provisional"
-          : "missing";
-  const todayScore = scoreMode === "estimated" ? estimate.score : scores.total;
+  const scoreMode = estimate.score === null ? "missing" : "estimated";
+  const todayScore = estimate.coverage >= 35 ? estimate.score : null;
   const trend = buildWeeklyTrend(summaries, input.date).map((bar) => ({
     ...bar,
-    value: bar.today && todayScore !== null ? todayScore : bar.value,
-    estimated: bar.today && scoreMode === "estimated",
+    estimated: false,
   }));
   const scoredSummaries = summaries.filter((item) => item.totalScore !== null);
   const average = scoredSummaries.length
     ? Math.round(scoredSummaries.reduce((total, item) => total + (item.totalScore ?? 0), 0) / scoredSummaries.length)
     : 0;
   const estimateSources = estimate.inputs.map((key) => estimateInputLabels[key]).join("・");
-  const scoreBadge =
-    scoreMode === "estimated" ? "推定" : scoreMode === "provisional" ? "暫定" : scoreMode === "actual" ? "実績" : null;
+  const coverageBand =
+    estimate.coverage < 35
+      ? "情報不足"
+      : estimate.coverage < 60
+        ? "低カバー率"
+        : estimate.coverage < 80
+          ? "中カバー率"
+          : "高カバー率";
+  const scoreBadge = scoreMode === "estimated" ? `推定・${coverageBand}` : null;
   const scoreLabel =
-    scoreMode === "missing"
-      ? "条件または実績を記録しましょう"
-      : scoreMode === "estimated"
-        ? "現時点のコンディションからの見込みです。"
-        : todayScore !== null && todayScore >= 80
-          ? "良い流れです。"
-          : "振り返る材料が見えてきました。";
+    estimate.score === null
+      ? "現在の条件を記録しましょう"
+      : estimate.coverage < 35
+        ? "数値表示にはもう少し入力が必要です。"
+        : "現時点のコンディションからの見込みです。";
   const scoreSubline =
-    scoreMode === "estimated"
-      ? `推定カバー率 ${estimate.coverage}% · ${estimateSources}から算出 · 実績ではありません`
-      : scoreMode === "provisional"
-        ? `成果入力カバー率 ${scores.recordingRate}% · 入力済み実績だけの暫定値`
-        : scoreMode === "actual"
-          ? "成果・集中・品質評価から算出した実績"
-          : "未入力の項目は0点として扱いません";
+    estimate.score !== null
+      ? `${estimate.asOf ?? "時刻未記録"}時点 · カバー率 ${estimate.coverage}% · ${estimateSources} · 実績ではありません`
+      : "未入力は0点にせず、中立値へ縮約します";
 
   return (
     <main className="page-content">
@@ -175,15 +183,15 @@ export function PowerUpDashboard({ initialLog, initialSummaries, configurationWa
         <div className="date-chip">◷ <span>{input.date}</span></div>
       </div>
       {configurationWarning ? <div className="warning-banner"><span aria-hidden="true">!</span><div><strong>確認用モード</strong><span>Google Sheets未接続のため、表示と保存は確認用です。Vercel環境変数を設定すると実データを保存できます。</span></div></div> : null}
-      <section className="card score-hero" aria-label="今日のパフォーマンススコア">
-        <div className="score-hero-main"><div className="score-hero-title"><span className="pulse-dot" /> 今日のパフォーマンススコア</div><div className="score-figure"><strong>{todayScore ?? "—"}</strong><span className="score-unit">/ 100</span>{scoreBadge ? <span className={`score-mode-badge ${scoreMode}`}>{scoreBadge}</span> : null}</div><p className="score-label">{scoreLabel}</p><p className="score-subline">{scoreSubline}</p></div>
-        <div className="score-hero-chart"><div className="chart-header"><strong>直近7日間の流れ</strong><span>実績平均 <b>{scoredSummaries.length ? average : "—"}</b></span></div><div className="trend-bars">{trend.map((bar) => <div className={`trend-column ${bar.today ? "today" : ""} ${bar.estimated ? "estimated" : ""} ${bar.value === null ? "missing" : ""}`} key={bar.label}><div className="trend-bar" style={{ height: bar.value === null || bar.value === 0 ? "0px" : `${Math.max(7, (bar.value / 100) * 80)}px` }} /><span>{bar.label}</span></div>)}</div><div className="trend-average"><span>{scoreMode === "estimated" ? "斜線の今日スコアは推定値で、実績平均には含みません。" : "今日の実績を記録すると、傾向を比較できます。"}</span></div></div>
+      <section className="card score-hero" aria-label="現在時点の推定パフォーマンス">
+        <div className="score-hero-main"><div className="score-hero-title"><span className="pulse-dot" /> 現在時点の推定パフォーマンス</div><div className="score-figure"><strong>{todayScore ?? "—"}</strong><span className="score-unit">/ 100</span>{scoreBadge ? <span className={`score-mode-badge ${scoreMode}`}>{scoreBadge}</span> : null}</div><p className="score-label">{scoreLabel}</p><p className="score-subline">{scoreSubline}</p><div className="estimate-breakdown">{Object.entries(estimate.components).map(([key, component]) => <span key={key}><b>{estimateInputLabels[key as keyof typeof estimateInputLabels]}</b>{component.score === null ? "—" : component.score}<small>入力 {component.coverage}%</small></span>)}</div>{estimate.reasons.length ? <ul className="estimate-reasons">{estimate.reasons.slice(0, 2).map((reason) => <li key={reason}>{reason}</li>)}</ul> : null}</div>
+        <div className="score-hero-chart"><div className="chart-header"><strong>直近7日間の実績</strong><span>実績平均 <b>{scoredSummaries.length ? average : "—"}</b></span></div><div className="trend-bars">{trend.map((bar) => <div className={`trend-column ${bar.today ? "today" : ""} ${bar.value === null ? "missing" : ""}`} key={bar.label}><div className="trend-bar" style={{ height: bar.value === null || bar.value === 0 ? "0px" : `${Math.max(7, (bar.value / 100) * 80)}px` }} /><span>{bar.label}</span></div>)}</div><div className="trend-average"><span>推定値は日内で変わるため、実績グラフへ混ぜません。</span></div></div>
       </section>
       <div className="metric-grid">
         <MetricCard icon="◒" tone="sleep" title="睡眠コンディション" value={displayScore(scores.sleep, SCORE_MAX.sleep)} meta={input.sleep.pixelWatchScore === null ? "Pixel Watchスコアを入力" : `デバイススコア ${input.sleep.pixelWatchScore}`} score={scores.sleep} max={SCORE_MAX.sleep} />
         <MetricCard icon="◌" tone="food" title="食事行動" value={displayScore(scores.food, SCORE_MAX.food)} meta={`${input.meals.filter((meal) => meal.eatenAt).length}食 · 間食 ${input.snackRecorded ? "記録済み" : "未記録"}`} score={scores.food} max={SCORE_MAX.food} />
         <MetricCard icon="▣" tone="phone" title="デジタル注意環境" value={displayScore(scores.phone, SCORE_MAX.phone)} meta={input.phone.entertainmentMinutes === null ? "3項目すべてを入力" : `娯楽 ${Math.floor(input.phone.entertainmentMinutes / 60)}h ${input.phone.entertainmentMinutes % 60}m`} score={scores.phone} max={SCORE_MAX.phone} />
-        <MetricCard icon="↗" tone="result" title={scoreMode === "estimated" ? "推定パフォーマンス" : scoreMode === "provisional" ? "暫定パフォーマンス" : "実際のパフォーマンス"} value={displayScore(todayScore, SCORE_MAX.result)} meta={scoreMode === "estimated" ? `入力カバー率 ${estimate.coverage}% · ${estimateSources}` : input.result.focusMinutes === null ? "成果・集中・品質を入力" : `集中 ${input.result.focusMinutes}分`} score={todayScore} max={SCORE_MAX.result} badge={scoreBadge} />
+        <MetricCard icon="↗" tone="result" title="今日の実績パフォーマンス" value={displayScore(scores.result, SCORE_MAX.result)} meta={scores.provisional ? `実績入力カバー率 ${scores.recordingRate}%` : `集中 ${input.result.focusMinutes ?? 0}分`} score={scores.result} max={SCORE_MAX.result} badge={scores.result === null ? null : scores.provisional ? "暫定" : "実績"} />
       </div>
       <div className="section-row"><div><h2>今日のログ</h2><p>入力内容を確認し、最後にまとめて保存できます。</p></div><Link className="section-link" href="/logs">ログを見る →</Link></div>
       <div className="lower-grid"><ActivityCard log={input} /><section className="card insight-card"><div className="card-heading"><div><h2>次に試すこと</h2><p>小さな実験をひとつだけ</p></div><span className="ai-badge">✦ Gemini AI insight</span></div><p className="insight-copy">{aiInsight ? <>{aiInsight.reason}<br /><em>{aiInsight.nextExperiment}</em></> : <>昨日は昼食後の眠気が強めでした。<br /><em>次回は甘い飲料を無糖のお茶に替えてみましょう。</em></>}</p><button className="insight-action" type="button" onClick={askGemini} disabled={aiLoading}>{aiLoading ? "作成中…" : "Gemini採点案を更新 →"}</button></section></div>
@@ -209,6 +217,14 @@ function ActivityCard({ log }: { log: DailyLogInput }) {
 type EditorProps = { input: DailyLogInput; scores: ReturnType<typeof calculateScores>; aiInsight: DailyLogInput["aiInsight"]; aiLoading: boolean; saving: boolean; message: string; error: string; updateInput: (patch: Partial<DailyLogInput>) => void; updateMeal: (type: MealType, patch: Partial<MealInput>) => void; updateSnack: (index: number, patch: Partial<SnackInput>) => void; askGemini: () => void; adoptAi: () => void; save: () => void };
 
 function Editor({ input, scores, aiInsight, aiLoading, saving, message, error, updateInput, updateMeal, updateSnack, askGemini, adoptAi, save }: EditorProps) {
+  const performanceContext = input.performanceContext ?? {
+    assessmentTime: null,
+    wakeTime: null,
+    currentAlertness: null,
+    continuousWorkMinutes: null,
+    minutesUntilNextCommitment: null,
+  };
+
   return (
     <section className="card editor-card" id="settings">
       <div className="editor-heading">
@@ -217,6 +233,30 @@ function Editor({ input, scores, aiInsight, aiLoading, saving, message, error, u
           <p>選択式中心。Geminiが配点案をつくり、最後はあなたが確定します。</p>
         </div>
         <span className="ai-badge">Gemini API preview</span>
+      </div>
+
+      <div className="editor-section">
+        <div className="editor-section-title"><span className="section-number">00</span>現在時点と今日の予定</div>
+        <div className="input-grid four">
+          <Field label="推定する時刻">
+            <input type="time" value={performanceContext.assessmentTime ?? ""} onChange={(event) => updateInput({ performanceContext: { ...performanceContext, assessmentTime: event.target.value || null } })} />
+          </Field>
+          <Field label="起床時刻">
+            <input type="time" value={performanceContext.wakeTime ?? ""} onChange={(event) => updateInput({ performanceContext: { ...performanceContext, wakeTime: event.target.value || null } })} />
+          </Field>
+          <Field label="連続して作業した時間（分）">
+            <input type="number" min="0" max="1440" value={performanceContext.continuousWorkMinutes ?? ""} placeholder="例：75" onChange={(event) => updateInput({ performanceContext: { ...performanceContext, continuousWorkMinutes: event.target.value === "" ? null : Number(event.target.value) } })} />
+          </Field>
+          <Field label="次の予定まで（分）">
+            <input type="number" min="0" max="1440" value={performanceContext.minutesUntilNextCommitment ?? ""} placeholder="例：45" onChange={(event) => updateInput({ performanceContext: { ...performanceContext, minutesUntilNextCommitment: event.target.value === "" ? null : Number(event.target.value) } })} />
+          </Field>
+        </div>
+        <div className="field" style={{ marginTop: 12 }}>
+          <label>現在の覚醒感</label>
+          <ChoiceGroup name="current-alertness" value={performanceContext.currentAlertness?.toString() ?? ""} options={["1", "2", "3", "4", "5"]} labels={["1", "2", "3", "4", "5"]} onChange={(value) => updateInput({ performanceContext: { ...performanceContext, currentAlertness: value ? Number(value) : null } })} />
+          <ScaleGuide low="1 かなり眠い" middle="3 普通" high="5 とても冴えている" />
+        </div>
+        <p className="help-text">起床後の経過、現在の覚醒感、連続作業、次の予定までの余白で、同じ日の中の上下を反映します。実績スコアには加算しません。</p>
       </div>
 
       <div className="editor-section">
@@ -316,7 +356,7 @@ function Editor({ input, scores, aiInsight, aiLoading, saving, message, error, u
               <BooleanChoice name="meal-timing-gap" value={input.mealTiming.noLongGap} yesLabel="できた" noLabel="できなかった" onChange={(value) => updateInput({ mealTiming: { ...input.mealTiming, noLongGap: value } })} />
             </Field>
           </div>
-          <p className="help-text">3項目を「できた／できなかった／未記録」で区別します。一般的な食事行動の振り返り用で、血糖値を評価するものではありません。</p>
+          <p className="help-text">3項目を「できた／できなかった／未記録」で区別します。現在推定には弱く反映し、血糖値を評価・推定するものではありません。</p>
         </div>
       </div>
 
@@ -333,7 +373,7 @@ function Editor({ input, scores, aiInsight, aiLoading, saving, message, error, u
             <BooleanChoice name="phone-boundary" value={input.phone.limitedMorningOrNightUse} yesLabel="守った" noLabel="守れなかった" onChange={(value) => updateInput({ phone: { ...input.phone, limitedMorningOrNightUse: value } })} />
           </Field>
         </div>
-        <p className="help-text">デジタル注意環境：{scores.phone === null ? "3項目をすべて入力すると算出" : `${scores.phone} / ${SCORE_MAX.phone}`} · ドーパミン量を評価するものではありません。</p>
+        <p className="help-text">デジタル注意環境：{scores.phone === null ? "実績用の8点指標は3項目入力で算出" : `${scores.phone} / ${SCORE_MAX.phone}`} · 現在推定では入力済み項目を個別に反映します。ドーパミン量を評価するものではありません。</p>
       </div>
 
       <div className="editor-section">
@@ -379,7 +419,7 @@ function Editor({ input, scores, aiInsight, aiLoading, saving, message, error, u
       </div>
 
       <div className="editor-actions">
-        {message ? <span className="save-message" role="status">{message}</span> : error ? <span className="error-message" role="alert">{error}</span> : <span className="save-message">パフォーマンススコア：{scores.total ?? "未確定"} / 100</span>}
+        {message ? <span className="save-message" role="status">{message}</span> : error ? <span className="error-message" role="alert">{error}</span> : <span className="save-message">実績パフォーマンス：{scores.total ?? "未確定"} / 100</span>}
         <button className="ghost-button" type="button" onClick={() => window.location.reload()}>入力を戻す</button>
         <button className="primary-button" type="button" onClick={save} disabled={saving}>{saving ? "保存しています…" : "今日のログを保存"}</button>
       </div>
@@ -390,7 +430,7 @@ function Editor({ input, scores, aiInsight, aiLoading, saving, message, error, u
 function MealEditor({ meal, update }: { meal: MealInput; update: (patch: Partial<MealInput>) => void }) {
   const point = calculateMealPoints(meal);
   const toggleFeature = (feature: MealFeature) => update({ features: meal.features.includes(feature) ? meal.features.filter((item) => item !== feature) : [...meal.features.filter((item) => item !== "normal"), feature] });
-  return <div className="meal-panel"><div className="meal-panel-head"><strong>{mealNames[meal.type]}</strong><span className="meal-score">{point === null ? "未記録" : `${point} / 5`}</span></div><div className="input-grid four"><Field label="時刻"><input type="time" value={meal.eatenAt ?? ""} onChange={(event) => update({ eatenAt: event.target.value || null })} /></Field><Field label="主食"><select value={meal.carbohydrateLevel ?? ""} onChange={(event) => update({ carbohydrateLevel: (event.target.value || null) as FoodLevel | null })}><option value="">選択</option><option value="sufficient">十分</option><option value="small">少量</option><option value="none">なし</option><option value="large">多い</option></select></Field><Field label="たんぱく質"><select value={meal.proteinLevel ?? ""} onChange={(event) => update({ proteinLevel: (event.target.value || null) as FoodLevel | null })}><option value="">選択</option><option value="sufficient">十分</option><option value="small">少量</option><option value="none">なし</option></select></Field><Field label="野菜"><select value={meal.vegetableLevel ?? ""} onChange={(event) => update({ vegetableLevel: (event.target.value || null) as FoodLevel | null })}><option value="">選択</option><option value="sufficient">十分</option><option value="small">少量</option><option value="none">なし</option></select></Field></div><div className="input-grid four" style={{ marginTop: 10 }}><Field label="量"><select value={meal.portionLevel ?? ""} onChange={(event) => update({ portionLevel: (event.target.value || null) as PortionLevel | null })}><option value="">選択</option><option value="just-right">ちょうどよい</option><option value="slightly-high">やや多い</option><option value="overeating">食べ過ぎ</option></select></Field><Field label="飲み物"><select value={meal.drinkType ?? ""} onChange={(event) => update({ drinkType: (event.target.value || null) as MealInput["drinkType"] })}><option value="">選択</option><option value="water-tea">水・お茶</option><option value="unsweetened">無糖飲料</option><option value="sweet">甘い飲料</option></select></Field><Field label="食後歩行（分）"><input type="number" min="0" max="240" value={meal.walkMinutes ?? ""} placeholder="例：10" onChange={(event) => update({ walkMinutes: event.target.value === "" ? null : Number(event.target.value) })} /></Field><Field label="食後の眠気"><select value={meal.postMealSleepiness ?? ""} onChange={(event) => update({ postMealSleepiness: event.target.value === "" ? null : Number(event.target.value) })}><option value="">未記録</option><option value="1">1：なし</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5：強い</option></select></Field></div><div className="check-row" style={{ marginTop: 10 }}><span className="help-text" style={{ margin: 0 }}>特徴</span>{(["noodle", "fried", "eating-out", "double-staple"] as Exclude<MealFeature, "normal">[]).map((feature) => <Check key={feature} label={featureLabels[feature]} value={meal.features.includes(feature)} onChange={() => toggleFeature(feature)} />)}</div><p className="help-text">麺類・揚げ物・外食・食後の眠気は傾向分析用です。主食の重ね食いのみ食事点へ反映します。</p></div>;
+  return <div className="meal-panel"><div className="meal-panel-head"><strong>{mealNames[meal.type]}</strong><span className="meal-score">{point === null ? "未記録" : `${point} / 5`}</span></div><div className="input-grid four"><Field label="時刻"><input type="time" value={meal.eatenAt ?? ""} onChange={(event) => update({ eatenAt: event.target.value || null })} /></Field><Field label="主食"><select value={meal.carbohydrateLevel ?? ""} onChange={(event) => update({ carbohydrateLevel: (event.target.value || null) as FoodLevel | null })}><option value="">選択</option><option value="sufficient">十分</option><option value="small">少量</option><option value="none">なし</option><option value="large">多い</option></select></Field><Field label="たんぱく質"><select value={meal.proteinLevel ?? ""} onChange={(event) => update({ proteinLevel: (event.target.value || null) as FoodLevel | null })}><option value="">選択</option><option value="sufficient">十分</option><option value="small">少量</option><option value="none">なし</option></select></Field><Field label="野菜"><select value={meal.vegetableLevel ?? ""} onChange={(event) => update({ vegetableLevel: (event.target.value || null) as FoodLevel | null })}><option value="">選択</option><option value="sufficient">十分</option><option value="small">少量</option><option value="none">なし</option></select></Field></div><div className="input-grid four" style={{ marginTop: 10 }}><Field label="量"><select value={meal.portionLevel ?? ""} onChange={(event) => update({ portionLevel: (event.target.value || null) as PortionLevel | null })}><option value="">選択</option><option value="just-right">ちょうどよい</option><option value="slightly-high">やや多い</option><option value="overeating">食べ過ぎ</option></select></Field><Field label="飲み物"><select value={meal.drinkType ?? ""} onChange={(event) => update({ drinkType: (event.target.value || null) as MealInput["drinkType"] })}><option value="">選択</option><option value="water-tea">水・お茶</option><option value="unsweetened">無糖飲料</option><option value="sweet">甘い飲料</option></select></Field><Field label="食後歩行（分）"><input type="number" min="0" max="240" value={meal.walkMinutes ?? ""} placeholder="例：10" onChange={(event) => update({ walkMinutes: event.target.value === "" ? null : Number(event.target.value) })} /></Field><Field label="食後の眠気"><select value={meal.postMealSleepiness ?? ""} onChange={(event) => update({ postMealSleepiness: event.target.value === "" ? null : Number(event.target.value) })}><option value="">未記録</option><option value="1">1：なし</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5：強い</option></select></Field></div><div className="check-row" style={{ marginTop: 10 }}><span className="help-text" style={{ margin: 0 }}>特徴</span>{(["noodle", "fried", "eating-out", "double-staple"] as Exclude<MealFeature, "normal">[]).map((feature) => <Check key={feature} label={featureLabels[feature]} value={meal.features.includes(feature)} onChange={() => toggleFeature(feature)} />)}</div><p className="help-text">現在推定は直近4時間の食事だけを対象にし、食後眠気があれば本人の反応として最優先します。未記録時だけ量・主食・たんぱく質・野菜・飲み物・揚げ物・歩行を弱い代理情報に使い、麺類・外食だけでは減点しません。</p></div>;
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) { return <div className="field"><label>{label}</label>{children}</div>; }

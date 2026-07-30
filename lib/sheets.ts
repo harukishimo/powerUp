@@ -48,6 +48,13 @@ const DAILY_HEADERS = [
   "estimated_performance_score",
   "estimate_coverage",
   "estimate_version",
+  "assessment_time",
+  "wake_time",
+  "current_alertness",
+  "continuous_work_minutes",
+  "minutes_until_next_commitment",
+  "estimate_components_json",
+  "estimate_reasons_json",
 ];
 
 const MEAL_HEADERS = [
@@ -371,6 +378,13 @@ function dailyRow(log: DailyLog) {
     cell(estimate.score),
     cell(estimate.coverage),
     estimate.version,
+    cell(log.performanceContext?.assessmentTime),
+    cell(log.performanceContext?.wakeTime),
+    cell(log.performanceContext?.currentAlertness),
+    cell(log.performanceContext?.continuousWorkMinutes),
+    cell(log.performanceContext?.minutesUntilNextCommitment),
+    JSON.stringify(estimate.components),
+    JSON.stringify(estimate.reasons),
   ];
 }
 

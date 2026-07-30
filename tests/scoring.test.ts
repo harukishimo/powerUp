@@ -133,6 +133,13 @@ describe("scoring v2", () => {
   it("estimates performance from available condition inputs without changing the actual score", () => {
     const input = emptyLog();
     input.sleep = { pixelWatchScore: 66, recoveryFeeling: 2 };
+    input.performanceContext = {
+      assessmentTime: "09:27",
+      wakeTime: null,
+      currentAlertness: null,
+      continuousWorkMinutes: null,
+      minutesUntilNextCommitment: null,
+    };
     input.meals = [{
       ...blankMeal("breakfast"),
       eatenAt: "07:20",
@@ -148,44 +155,153 @@ describe("scoring v2", () => {
 
     const estimate = calculateEstimatedPerformance(input);
 
-    expect(estimate).toEqual({
-      score: 57,
-      coverage: 47,
+    expect(estimate).toMatchObject({
+      score: 53,
+      coverage: 44,
       inputs: ["sleep", "food"],
       version: ESTIMATE_VERSION,
+      asOf: "09:27",
     });
+    expect(estimate.components.sleep).toMatchObject({ score: 56, coverage: 100, weight: 30 });
+    expect(estimate.components.food).toMatchObject({ score: 62, coverage: 71, weight: 20 });
     expect(calculateScores(input).total).toBeNull();
   });
 
   it("reports zero estimate coverage for empty logs and full coverage for complete conditions", () => {
-    expect(calculateEstimatedPerformance(emptyLog())).toEqual({
+    expect(calculateEstimatedPerformance(emptyLog())).toMatchObject({
       score: null,
       coverage: 0,
       inputs: [],
       version: ESTIMATE_VERSION,
+      asOf: null,
     });
 
     const input = emptyLog();
     input.sleep = { pixelWatchScore: 100, recoveryFeeling: 5 };
+    input.performanceContext = {
+      assessmentTime: "13:00",
+      wakeTime: "06:30",
+      currentAlertness: 5,
+      continuousWorkMinutes: 45,
+      minutesUntilNextCommitment: 120,
+    };
     input.meals = [
-      completeMeal("breakfast"),
-      completeMeal("lunch"),
+      { ...completeMeal("breakfast"), eatenAt: "10:00", postMealSleepiness: 1 },
+      { ...completeMeal("lunch"), eatenAt: "12:00", postMealSleepiness: 1 },
       completeMeal("dinner"),
     ];
     input.mealTiming = { regular: true, dinnerBeforeBed: true, noLongGap: true };
     input.snackRecorded = true;
+    input.snacks = [{
+      id: "recent-snack",
+      eatenAt: "12:30",
+      occurred: true,
+      category: "healthy-small",
+      amountLevel: "small",
+      planned: true,
+      beforeBed: false,
+      note: "",
+    }];
     input.phone = {
       entertainmentMinutes: 60,
       separatedDuringWork: true,
       limitedMorningOrNightUse: true,
     };
 
-    expect(calculateEstimatedPerformance(input)).toEqual({
-      score: 100,
+    expect(calculateEstimatedPerformance(input)).toMatchObject({
+      score: 98,
       coverage: 100,
-      inputs: ["sleep", "food", "phone"],
+      inputs: ["sleep", "wake", "alertness", "work", "food", "digital"],
       version: ESTIMATE_VERSION,
+      asOf: "13:00",
     });
+  });
+
+  it("prioritizes a recorded post-meal response over meal proxies", () => {
+    const base = emptyLog();
+    base.performanceContext = {
+      assessmentTime: "13:00",
+      wakeTime: null,
+      currentAlertness: null,
+      continuousWorkMinutes: null,
+      minutesUntilNextCommitment: null,
+    };
+    const favorable = {
+      ...completeMeal("lunch"),
+      eatenAt: "12:00",
+      postMealSleepiness: 5,
+    };
+    const unfavorable: MealInput = {
+      ...favorable,
+      carbohydrateLevel: "large",
+      proteinLevel: "none",
+      vegetableLevel: "none",
+      portionLevel: "overeating",
+      drinkType: "sweet",
+      features: ["fried", "double-staple"],
+      walkMinutes: 0,
+    };
+
+    const favorableEstimate = calculateEstimatedPerformance({ ...base, meals: [favorable] });
+    const unfavorableEstimate = calculateEstimatedPerformance({ ...base, meals: [unfavorable] });
+
+    expect(favorableEstimate.components.food).toEqual(unfavorableEstimate.components.food);
+    expect(favorableEstimate.score).toBe(unfavorableEstimate.score);
+  });
+
+  it("ignores future meals and meals older than four hours in the current estimate", () => {
+    const input = emptyLog();
+    input.performanceContext = {
+      assessmentTime: "13:00",
+      wakeTime: null,
+      currentAlertness: null,
+      continuousWorkMinutes: null,
+      minutesUntilNextCommitment: null,
+    };
+    input.meals = [
+      { ...completeMeal("breakfast"), eatenAt: "08:00", postMealSleepiness: 5 },
+      { ...completeMeal("dinner"), eatenAt: "19:00", postMealSleepiness: 5 },
+    ];
+
+    const estimate = calculateEstimatedPerformance(input);
+
+    expect(estimate.components.food).toMatchObject({ score: null, coverage: 0 });
+    expect(estimate.score).toBeNull();
+  });
+
+  it("uses partial digital evidence without treating missing items as zero", () => {
+    const input = emptyLog();
+    input.phone.separatedDuringWork = true;
+
+    const estimate = calculateEstimatedPerformance(input);
+
+    expect(estimate.components.digital).toEqual({
+      score: 100,
+      effectiveScore: 80,
+      coverage: 60,
+      weight: 15,
+    });
+    expect(estimate).toMatchObject({
+      score: 55,
+      coverage: 9,
+      inputs: ["digital"],
+    });
+  });
+
+  it("keeps actual performance inputs out of the current-condition estimate", () => {
+    const input = emptyLog();
+    input.sleep = { pixelWatchScore: 80, recoveryFeeling: 4 };
+    const before = calculateEstimatedPerformance(input);
+    input.result = {
+      achievementText: "重要な成果を完了",
+      confirmedAchievementScore: 5,
+      focusMinutes: 90,
+      reflectionRating: 5,
+      comment: "",
+    };
+
+    expect(calculateEstimatedPerformance(input)).toEqual(before);
+    expect(calculateScores(input).total).toBe(100);
   });
 
   it("scores explicit meal behavior without rewarding missing fields", () => {
@@ -263,6 +379,16 @@ describe("scoring v2", () => {
     expect(isValidDateString("2026-07-29")).toBe(true);
     expect(isValidDateString("2026-02-30")).toBe(false);
     expect(() => DailyLogInputSchema.parse({ ...emptyLog(), date: "2026-02-30" })).toThrow();
+    expect(() => DailyLogInputSchema.parse({
+      ...emptyLog(),
+      performanceContext: {
+        assessmentTime: "25:00",
+        wakeTime: "07:00",
+        currentAlertness: 3,
+        continuousWorkMinutes: 45,
+        minutesUntilNextCommitment: 30,
+      },
+    })).toThrow();
     expect(AiInsightSchema.parse(fallbackAiScore({ date: "2026-07-29", achievementText: "短い成果", reflectionRating: 3, focusMinutes: 30, foodSummary: {}, deterministicScores: { sleep: null, food: null, phone: null } }))).toMatchObject({ confidence: "low" });
   });
 

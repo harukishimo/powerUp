@@ -66,6 +66,13 @@ export function createDemoInput(date: string): DailyLogInput {
     ],
     snackRecorded: true,
     phone: { entertainmentMinutes: 120, separatedDuringWork: false, limitedMorningOrNightUse: false },
+    performanceContext: {
+      assessmentTime: "14:30",
+      wakeTime: "06:45",
+      currentAlertness: 3,
+      continuousWorkMinutes: 75,
+      minutesUntilNextCommitment: 45,
+    },
     result: {
       achievementText: "企画書の構成を完成させ、上司にレビュー依頼を送った。",
       focusMinutes: 75,

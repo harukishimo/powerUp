@@ -24,21 +24,34 @@ export const PERFORMANCE_WEIGHTS = {
   reflection: 15,
 } as const;
 
-export const ESTIMATE_VERSION = "condition-v1";
+export const ESTIMATE_VERSION = "current-condition-v2";
 
 export const ESTIMATED_PERFORMANCE_WEIGHTS = {
-  sleep: 40,
-  food: 25,
-  phone: 35,
+  sleep: 30,
+  wake: 10,
+  alertness: 15,
+  work: 10,
+  food: 20,
+  digital: 15,
 } as const;
 
 export type EstimateInput = keyof typeof ESTIMATED_PERFORMANCE_WEIGHTS;
+
+export interface EstimateComponent {
+  score: number | null;
+  effectiveScore: number;
+  coverage: number;
+  weight: number;
+}
 
 export interface EstimatedPerformance {
   score: number | null;
   coverage: number;
   inputs: EstimateInput[];
   version: typeof ESTIMATE_VERSION;
+  asOf: string | null;
+  components: Record<EstimateInput, EstimateComponent>;
+  reasons: string[];
 }
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -238,72 +251,368 @@ export function calculateResultPoints(result: ResultInput): number | null {
   );
 }
 
-export function calculateEstimatedPerformance(input: DailyLogInput): EstimatedPerformance {
-  const sleep = calculateSleepPoints(
-    input.sleep.pixelWatchScore,
-    input.sleep.recoveryFeeling,
-  );
-  const food = foodEvidence(input);
-  const phone = calculatePhonePoints(input.phone);
-  const candidates: Array<{
-    key: EstimateInput;
-    weight: number;
-    normalizedScore: number | null;
-    evidenceRatio: number;
-  }> = [
-    {
-      key: "sleep",
-      weight: ESTIMATED_PERFORMANCE_WEIGHTS.sleep,
-      normalizedScore: sleep === null ? null : (sleep / SCORE_MAX.sleep) * 100,
-      evidenceRatio: sleep === null ? 0 : 1,
-    },
-    {
-      key: "food",
-      weight: ESTIMATED_PERFORMANCE_WEIGHTS.food,
-      normalizedScore:
-        food.recordedMax === 0 ? null : (food.points / food.recordedMax) * 100,
-      evidenceRatio: clamp(food.recordedMax / SCORE_MAX.food, 0, 1),
-    },
-    {
-      key: "phone",
-      weight: ESTIMATED_PERFORMANCE_WEIGHTS.phone,
-      normalizedScore: phone === null ? null : (phone / SCORE_MAX.phone) * 100,
-      evidenceRatio: phone === null ? 0 : 1,
-    },
+function timeToMinutes(value: string | null | undefined): number | null {
+  if (!value || !/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) return null;
+  const [hours, minutes] = value.split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
+function interpolate(points: Array<[number, number]>, value: number) {
+  if (value <= points[0][0]) return points[0][1];
+  for (let index = 1; index < points.length; index += 1) {
+    const [nextX, nextY] = points[index];
+    const [previousX, previousY] = points[index - 1];
+    if (value <= nextX) {
+      const ratio = (value - previousX) / (nextX - previousX);
+      return previousY + (nextY - previousY) * ratio;
+    }
+  }
+  return points[points.length - 1][1];
+}
+
+function createEstimateComponent(
+  score: number | null,
+  coverage: number,
+  weight: number,
+): EstimateComponent {
+  const normalizedCoverage = clamp(coverage, 0, 1);
+  return {
+    score: score === null ? null : round(clamp(score, 0, 100)),
+    effectiveScore:
+      score === null ? 50 : round(50 + normalizedCoverage * (clamp(score, 0, 100) - 50)),
+    coverage: round(normalizedCoverage * 100),
+    weight,
+  };
+}
+
+function sleepEstimate(input: DailyLogInput, reasons: string[]) {
+  const values: Array<[number | null, number]> = [
+    [input.sleep.pixelWatchScore, 0.75],
+    [
+      input.sleep.recoveryFeeling === null
+        ? null
+        : ((input.sleep.recoveryFeeling - 1) / 4) * 100,
+      0.25,
+    ],
   ];
-  const available = candidates.filter(
-    (candidate): candidate is typeof candidate & { normalizedScore: number } =>
-      candidate.normalizedScore !== null,
-  );
-  const availableWeight = available.reduce((total, candidate) => total + candidate.weight, 0);
+  const recorded = values.filter(([value]) => value !== null);
+  if (recorded.length === 0) {
+    return createEstimateComponent(null, 0, ESTIMATED_PERFORMANCE_WEIGHTS.sleep);
+  }
+  const recordedWeight = recorded.reduce((total, [, weight]) => total + weight, 0);
   const score =
-    availableWeight === 0
-      ? null
-      : clamp(
-          round(
-            available.reduce(
-              (total, candidate) => total + candidate.normalizedScore * candidate.weight,
-              0,
-            ) / availableWeight,
-          ),
+    recorded.reduce((total, [value, weight]) => total + (value ?? 0) * weight, 0) /
+    recordedWeight;
+  if (input.sleep.recoveryFeeling !== null) {
+    reasons.push(`朝の回復感 ${input.sleep.recoveryFeeling}/5 を反映`);
+  }
+  return createEstimateComponent(
+    score,
+    recordedWeight,
+    ESTIMATED_PERFORMANCE_WEIGHTS.sleep,
+  );
+}
+
+function wakeEstimate(input: DailyLogInput, reasons: string[]) {
+  const assessment = timeToMinutes(input.performanceContext?.assessmentTime);
+  const wake = timeToMinutes(input.performanceContext?.wakeTime);
+  if (assessment === null || wake === null) {
+    return createEstimateComponent(null, 0, ESTIMATED_PERFORMANCE_WEIGHTS.wake);
+  }
+  const minutesAwake = assessment >= wake ? assessment - wake : assessment + 1440 - wake;
+  const score = interpolate([
+    [0, 55],
+    [30, 75],
+    [60, 90],
+    [120, 100],
+    [600, 100],
+    [840, 85],
+    [1020, 55],
+    [1200, 30],
+  ], minutesAwake);
+  if (minutesAwake < 120) reasons.push("起床後2時間以内の睡眠慣性を反映");
+  if (minutesAwake > 840) reasons.push("長時間の連続覚醒を反映");
+  return createEstimateComponent(
+    score,
+    1,
+    ESTIMATED_PERFORMANCE_WEIGHTS.wake,
+  );
+}
+
+function alertnessEstimate(input: DailyLogInput, reasons: string[]) {
+  const alertness = input.performanceContext?.currentAlertness ?? null;
+  if (alertness === null) {
+    return createEstimateComponent(null, 0, ESTIMATED_PERFORMANCE_WEIGHTS.alertness);
+  }
+  reasons.push(`現在の覚醒感 ${alertness}/5 を反映`);
+  return createEstimateComponent(
+    alertness * 20,
+    1,
+    ESTIMATED_PERFORMANCE_WEIGHTS.alertness,
+  );
+}
+
+function workContextEstimate(input: DailyLogInput, reasons: string[]) {
+  const values: Array<[number, number]> = [];
+  const continuousWork = input.performanceContext?.continuousWorkMinutes ?? null;
+  const untilNextCommitment =
+    input.performanceContext?.minutesUntilNextCommitment ?? null;
+
+  if (continuousWork !== null) {
+    values.push([
+      interpolate([
+        [0, 100],
+        [60, 100],
+        [90, 85],
+        [120, 70],
+        [240, 50],
+      ], continuousWork),
+      0.6,
+    ]);
+    if (continuousWork > 90) reasons.push("長い連続作業時間を予定適合度へ反映");
+  }
+  if (untilNextCommitment !== null) {
+    values.push([
+      interpolate([
+        [0, 20],
+        [15, 40],
+        [30, 65],
+        [60, 85],
+        [90, 100],
+        [1440, 100],
+      ], untilNextCommitment),
+      0.4,
+    ]);
+    if (untilNextCommitment < 30) reasons.push("次の予定までの短い空き時間を反映");
+  }
+  const recordedWeight = values.reduce((total, [, weight]) => total + weight, 0);
+  if (recordedWeight === 0) {
+    return createEstimateComponent(null, 0, ESTIMATED_PERFORMANCE_WEIGHTS.work);
+  }
+  return createEstimateComponent(
+    values.reduce((total, [value, weight]) => total + value * weight, 0) /
+      recordedWeight,
+    recordedWeight,
+    ESTIMATED_PERFORMANCE_WEIGHTS.work,
+  );
+}
+
+function mealKernel(minutesSinceMeal: number) {
+  if (minutesSinceMeal < 0 || minutesSinceMeal >= 240) return 0;
+  if (minutesSinceMeal < 30) return minutesSinceMeal / 30;
+  if (minutesSinceMeal <= 120) return 1;
+  return (240 - minutesSinceMeal) / 120;
+}
+
+function snackKernel(minutesSinceSnack: number) {
+  if (minutesSinceSnack < 0 || minutesSinceSnack >= 180) return 0;
+  if (minutesSinceSnack < 20) return minutesSinceSnack / 20;
+  if (minutesSinceSnack <= 90) return 1;
+  return (180 - minutesSinceSnack) / 90;
+}
+
+function mealProxy(meal: MealInput) {
+  let proxy = 0;
+  let recorded = 0;
+
+  if (meal.portionLevel !== null) {
+    recorded += 1;
+    if (meal.portionLevel === "slightly-high") proxy -= 0.2;
+    if (meal.portionLevel === "overeating") proxy -= 0.45;
+  }
+  if (meal.carbohydrateLevel !== null || meal.features.includes("double-staple")) {
+    recorded += 1;
+    if (meal.carbohydrateLevel === "large" || meal.features.includes("double-staple")) {
+      proxy -= 0.25;
+    }
+  }
+  let balanceRisk = 0;
+  if (meal.proteinLevel !== null) {
+    recorded += 1;
+    if (meal.proteinLevel === "small") balanceRisk -= 0.05;
+    if (meal.proteinLevel === "none") balanceRisk -= 0.1;
+  }
+  if (meal.vegetableLevel !== null) {
+    recorded += 1;
+    if (meal.vegetableLevel === "small") balanceRisk -= 0.05;
+    if (meal.vegetableLevel === "none") balanceRisk -= 0.1;
+  }
+  proxy += Math.max(-0.15, balanceRisk);
+  if (meal.drinkType !== null) {
+    recorded += 1;
+    if (meal.drinkType === "sweet") proxy -= 0.15;
+  }
+  const explicitFeatures = meal.features.filter((feature) => feature !== "normal");
+  if (explicitFeatures.length > 0) {
+    recorded += 1;
+    if (meal.features.includes("fried")) proxy -= 0.15;
+  }
+  if (meal.walkMinutes !== null) {
+    recorded += 1;
+    proxy += 0.15 * Math.min(meal.walkMinutes / 10, 1);
+  }
+
+  return {
+    proxy: clamp(proxy, -1, 0.15),
+    evidenceRatio: clamp(recorded / 7, 0, 1),
+  };
+}
+
+function snackRisk(snack: SnackInput) {
+  if (!snack.occurred || snack.category === "healthy-small") return 0;
+  if (snack.category === "planned-meal") return snack.amountLevel === "large" ? -0.2 : 0;
+  if (snack.category === "sweet-only") {
+    if (snack.amountLevel === "large") return -0.3;
+    if (snack.amountLevel === "medium") return -0.2;
+    return -0.1;
+  }
+  return -0.35;
+}
+
+function foodStateEstimate(input: DailyLogInput, reasons: string[]) {
+  const assessment = timeToMinutes(input.performanceContext?.assessmentTime);
+  let delta = 0;
+  let coverage = 0;
+  let hasEvidence = false;
+
+  if (assessment !== null) {
+    for (const meal of input.meals) {
+      const eatenAt = timeToMinutes(meal.eatenAt);
+      if (eatenAt === null) continue;
+      const kernel = mealKernel(assessment - eatenAt);
+      if (kernel === 0) continue;
+      hasEvidence = true;
+      if (meal.postMealSleepiness !== null) {
+        const response = [0, 1, 0.5, 0, -0.5, -1][meal.postMealSleepiness] ?? 0;
+        delta += kernel * 25 * response;
+        coverage += kernel * 0.75;
+        reasons.push(`${meal.type}の食後の眠気 ${meal.postMealSleepiness}/5 を優先`);
+      } else {
+        const proxy = mealProxy(meal);
+        delta += kernel * 15 * proxy.proxy;
+        coverage += kernel * 0.45 * proxy.evidenceRatio;
+        if (meal.features.includes("noodle") || meal.features.includes("eating-out")) {
+          reasons.push("麺類・外食は種類だけで減点せず、量と反応を優先");
+        }
+      }
+    }
+
+    for (const snack of input.snacks) {
+      const eatenAt = timeToMinutes(snack.eatenAt);
+      if (eatenAt === null) continue;
+      const kernel = snackKernel(assessment - eatenAt);
+      if (kernel === 0) continue;
+      hasEvidence = true;
+      delta += kernel * 12 * snackRisk(snack);
+      coverage += kernel * 0.15;
+    }
+  }
+
+  if (input.snackRecorded && input.snacks.length === 0) {
+    hasEvidence = true;
+    coverage += 0.05;
+    reasons.push("間食なしは加点・減点せず中立として反映");
+  }
+
+  const timingValues = [
+    input.mealTiming.regular,
+    input.mealTiming.dinnerBeforeBed,
+    input.mealTiming.noLongGap,
+  ];
+  for (const value of timingValues) {
+    if (value === null) continue;
+    hasEvidence = true;
+    delta += value ? 1 : -1;
+    coverage += 0.05;
+  }
+
+  if (!hasEvidence) {
+    return createEstimateComponent(null, 0, ESTIMATED_PERFORMANCE_WEIGHTS.food);
+  }
+  return createEstimateComponent(
+    clamp(50 + delta, 0, 100),
+    coverage,
+    ESTIMATED_PERFORMANCE_WEIGHTS.food,
+  );
+}
+
+function digitalEstimate(input: DailyLogInput, reasons: string[]) {
+  const values: Array<[number, number]> = [];
+  if (input.phone.entertainmentMinutes !== null) {
+    values.push([
+      interpolate([
+        [0, 100],
+        [60, 100],
+        [120, 85],
+        [180, 65],
+        [240, 40],
+        [480, 20],
+        [1440, 0],
+      ], input.phone.entertainmentMinutes),
+      0.25,
+    ]);
+  }
+  if (input.phone.separatedDuringWork !== null) {
+    values.push([input.phone.separatedDuringWork ? 100 : 60, 0.6]);
+    reasons.push(
+      input.phone.separatedDuringWork
+        ? "作業中の通知・確認を抑えた"
+        : "作業中の通知・確認による中断を反映",
+    );
+  }
+  if (input.phone.limitedMorningOrNightUse !== null) {
+    values.push([input.phone.limitedMorningOrNightUse ? 100 : 60, 0.15]);
+  }
+  const recordedWeight = values.reduce((total, [, weight]) => total + weight, 0);
+  if (recordedWeight === 0) {
+    return createEstimateComponent(null, 0, ESTIMATED_PERFORMANCE_WEIGHTS.digital);
+  }
+  const score =
+    values.reduce((total, [value, weight]) => total + value * weight, 0) /
+    recordedWeight;
+  return createEstimateComponent(
+    score,
+    recordedWeight,
+    ESTIMATED_PERFORMANCE_WEIGHTS.digital,
+  );
+}
+
+export function calculateEstimatedPerformance(input: DailyLogInput): EstimatedPerformance {
+  const reasons: string[] = [];
+  const components: Record<EstimateInput, EstimateComponent> = {
+    sleep: sleepEstimate(input, reasons),
+    wake: wakeEstimate(input, reasons),
+    alertness: alertnessEstimate(input, reasons),
+    work: workContextEstimate(input, reasons),
+    food: foodStateEstimate(input, reasons),
+    digital: digitalEstimate(input, reasons),
+  };
+  const entries = Object.entries(components) as Array<[EstimateInput, EstimateComponent]>;
+  const hasEvidence = entries.some(([, component]) => component.score !== null);
+  const score = hasEvidence
+    ? round(
+        entries.reduce(
+          (total, [, component]) => total + component.effectiveScore * component.weight,
           0,
-          100,
-        );
+        ) / 100,
+      )
+    : null;
 
   return {
     score,
-    coverage: clamp(
-      round(
-        candidates.reduce(
-          (total, candidate) => total + candidate.weight * candidate.evidenceRatio,
-          0,
-        ),
+    coverage: round(
+      entries.reduce(
+        (total, [, component]) => total + component.weight * (component.coverage / 100),
+        0,
       ),
-      0,
-      100,
     ),
-    inputs: available.map((candidate) => candidate.key),
+    inputs: entries
+      .filter(([, component]) => component.score !== null)
+      .map(([key]) => key),
     version: ESTIMATE_VERSION,
+    asOf: input.performanceContext?.assessmentTime ?? null,
+    components,
+    reasons: [...new Set(reasons)].slice(0, 4),
   };
 }
 

@@ -4,7 +4,7 @@ import { PowerUpDashboard } from "@/components/powerup-dashboard";
 import { hasAccess } from "@/lib/auth";
 import { isSheetsConfigured } from "@/lib/config";
 import { createBlankLog } from "@/lib/demo-data";
-import { getTodayJst, shiftDate } from "@/lib/date";
+import { getCurrentTimeJst, getTodayJst, shiftDate } from "@/lib/date";
 import { getStorage } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
@@ -25,10 +25,11 @@ async function loadHomeData(today: string) {
 export default async function HomePage() {
   if (!(await hasAccess())) redirect("/access");
   const today = getTodayJst();
+  const currentTime = getCurrentTimeJst();
   const data = await loadHomeData(today);
   return (
     <AppShell active="today">
-      <PowerUpDashboard initialLog={data.initialLog} initialSummaries={data.summaries} configurationWarning={data.configurationWarning} />
+      <PowerUpDashboard initialLog={data.initialLog} initialSummaries={data.summaries} initialAssessmentTime={currentTime} configurationWarning={data.configurationWarning} />
     </AppShell>
   );
 }

@@ -14,6 +14,15 @@ export function getTodayJst() {
   }).format(new Date());
 }
 
+export function getCurrentTimeJst() {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Tokyo",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date());
+}
+
 export function shiftDate(date: string, days: number) {
   const value = new Date(`${date}T00:00:00+09:00`);
   value.setUTCDate(value.getUTCDate() + days);

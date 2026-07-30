@@ -49,6 +49,14 @@ export interface PhoneInput {
   limitedMorningOrNightUse: boolean | null;
 }
 
+export interface PerformanceContextInput {
+  assessmentTime: string | null;
+  wakeTime: string | null;
+  currentAlertness: number | null;
+  continuousWorkMinutes: number | null;
+  minutesUntilNextCommitment: number | null;
+}
+
 export interface ResultInput {
   achievementText: string;
   focusMinutes: number | null;
@@ -66,6 +74,7 @@ export interface DailyLogInput {
   snacks: SnackInput[];
   snackRecorded: boolean;
   phone: PhoneInput;
+  performanceContext?: PerformanceContextInput;
   result: ResultInput;
   aiInsight?: AiInsight | null;
   scoreVersion: string;
