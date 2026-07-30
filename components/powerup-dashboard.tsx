@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { LogReview } from "@/components/log-review";
 import { parseApiResponse } from "@/lib/client-api";
 import { buildWeeklyTrend } from "@/lib/trend";
@@ -224,8 +224,21 @@ function Editor({ input, scores, aiInsight, aiLoading, saving, message, error, u
     continuousWorkMinutes: null,
     minutesUntilNextCommitment: null,
   };
+  const saveActionsRef = useRef<HTMLDivElement>(null);
+  const [showSaveDock, setShowSaveDock] = useState(false);
+
+  useEffect(() => {
+    const saveActions = saveActionsRef.current;
+    if (!saveActions || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(([entry]) => {
+      setShowSaveDock(!entry.isIntersecting);
+    }, { threshold: 0.1 });
+    observer.observe(saveActions);
+    return () => observer.disconnect();
+  }, []);
 
   return (
+    <>
     <section className="card editor-card" id="settings">
       <div className="editor-heading">
         <div>
@@ -418,12 +431,14 @@ function Editor({ input, scores, aiInsight, aiLoading, saving, message, error, u
         )}
       </div>
 
-      <div className="editor-actions">
+      <div className="editor-actions" ref={saveActionsRef}>
         {message ? <span className="save-message" role="status">{message}</span> : error ? <span className="error-message" role="alert">{error}</span> : <span className="save-message">実績パフォーマンス：{scores.total ?? "未確定"} / 100</span>}
         <button className="ghost-button" type="button" onClick={() => window.location.reload()}>入力を戻す</button>
         <button className="primary-button" type="button" onClick={save} disabled={saving}>{saving ? "保存しています…" : "今日のログを保存"}</button>
       </div>
     </section>
+    {showSaveDock ? <div className="save-dock" role="region" aria-label="ログ保存"><span className="save-dock-copy">入力内容をいつでも保存できます</span><button className="primary-button" type="button" onClick={save} disabled={saving}>{saving ? "保存しています…" : "今日のログを保存"}</button></div> : null}
+    </>
   );
 }
 
