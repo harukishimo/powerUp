@@ -17,7 +17,7 @@ export function buildWeeklyTrend(summaries: DailyLogSummary[], to: string) {
     return {
       date,
       label,
-      value: summary?.totalScore ?? 0,
+      value: summary?.totalScore ?? null,
       today: date === to,
     };
   });

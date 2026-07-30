@@ -24,6 +24,23 @@ export const PERFORMANCE_WEIGHTS = {
   reflection: 15,
 } as const;
 
+export const ESTIMATE_VERSION = "condition-v1";
+
+export const ESTIMATED_PERFORMANCE_WEIGHTS = {
+  sleep: 40,
+  food: 25,
+  phone: 35,
+} as const;
+
+export type EstimateInput = keyof typeof ESTIMATED_PERFORMANCE_WEIGHTS;
+
+export interface EstimatedPerformance {
+  score: number | null;
+  coverage: number;
+  inputs: EstimateInput[];
+  version: typeof ESTIMATE_VERSION;
+}
+
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const round = (value: number) => Math.round(value);
 
@@ -47,29 +64,43 @@ function levelPoints(level: FoodLevel | null, full: number, half: number): numbe
   return 0;
 }
 
-export function calculateMealPoints(meal: MealInput | null | undefined): number | null {
-  if (!meal) return null;
+function mealEvidence(meal: MealInput | null | undefined) {
+  if (!meal) return { points: 0, recordedMax: 0 };
 
-  const values: Array<number | null> = [
-    levelPoints(meal.vegetableLevel, 1.5, 0.75),
-    levelPoints(meal.proteinLevel, 1, 0.5),
-    meal.portionLevel === null
-      ? null
-      : meal.portionLevel === "just-right"
-        ? 1
-        : meal.portionLevel === "slightly-high"
-          ? 0.5
-          : 0,
-    meal.drinkType === null ? null : meal.drinkType === "sweet" ? 0 : 1,
-    meal.carbohydrateLevel === null && !meal.features.includes("double-staple")
-      ? null
-      : meal.carbohydrateLevel === "large" || meal.features.includes("double-staple")
-        ? 0
-        : 0.5,
+  const values: Array<[number | null, number]> = [
+    [levelPoints(meal.vegetableLevel, 1.5, 0.75), 1.5],
+    [levelPoints(meal.proteinLevel, 1, 0.5), 1],
+    [
+      meal.portionLevel === null
+        ? null
+        : meal.portionLevel === "just-right"
+          ? 1
+          : meal.portionLevel === "slightly-high"
+            ? 0.5
+            : 0,
+      1,
+    ],
+    [meal.drinkType === null ? null : meal.drinkType === "sweet" ? 0 : 1, 1],
+    [
+      meal.carbohydrateLevel === null && !meal.features.includes("double-staple")
+        ? null
+        : meal.carbohydrateLevel === "large" || meal.features.includes("double-staple")
+          ? 0
+          : 0.5,
+      0.5,
+    ],
   ];
-  const recorded = values.filter((value): value is number => value !== null);
-  if (recorded.length === 0) return null;
-  return clamp(recorded.reduce((total, value) => total + value, 0), 0, 5);
+  const recorded = values.filter(([value]) => value !== null);
+  return {
+    points: recorded.reduce((total, [value]) => total + (value ?? 0), 0),
+    recordedMax: recorded.reduce((total, [, max]) => total + max, 0),
+  };
+}
+
+export function calculateMealPoints(meal: MealInput | null | undefined): number | null {
+  const evidence = mealEvidence(meal);
+  if (evidence.recordedMax === 0) return null;
+  return clamp(evidence.points, 0, 5);
 }
 
 export function calculateTimingPoints(timing: MealTimingInput): number | null {
@@ -78,13 +109,13 @@ export function calculateTimingPoints(timing: MealTimingInput): number | null {
     [timing.dinnerBeforeBed, 1],
     [timing.noLongGap, 0.5],
   ];
-  if (values.every(([value]) => value === null)) return null;
+  if (values.some(([value]) => value === null)) return null;
   return values.reduce((total, [value, points]) => total + (value === true ? points : 0), 0);
 }
 
 export function calculateSnackItemPoints(snack: SnackInput): number | null {
   if (!snack.occurred) return 1;
-  if (snack.category === null || snack.amountLevel === null) return null;
+  if (snack.category === null || snack.amountLevel === null || snack.beforeBed === null) return null;
   if (snack.beforeBed === true || snack.category === "large-or-late") return 0;
   if (snack.category === "healthy-small") return snack.amountLevel === "large" ? 0.5 : 1;
   if (snack.category === "planned-meal") {
@@ -107,32 +138,42 @@ export function calculateSnackPoints(snacks: SnackInput[], recorded: boolean): n
   );
 }
 
-export function calculateFoodPoints(input: DailyLogInput): number | null {
+function foodEvidence(input: DailyLogInput) {
   const meals = (["breakfast", "lunch", "dinner"] as const).map((type) =>
     input.meals.find((meal) => meal.type === type),
   );
-  const composition = meals.map(calculateMealPoints);
+  const composition = meals.map(mealEvidence);
   const walk = meals.reduce(
-    (total, meal) =>
-      total + (meal?.walkMinutes === null || meal?.walkMinutes === undefined
-        ? 0
-        : Math.min(meal.walkMinutes / 10, 1) * (2 / 3)),
-    0,
-  );
-  const hasWalk = meals.some(
-    (meal) => meal?.walkMinutes !== null && meal?.walkMinutes !== undefined,
+    (evidence, meal) => {
+      if (meal?.walkMinutes === null || meal?.walkMinutes === undefined) return evidence;
+      return {
+        points: evidence.points + Math.min(meal.walkMinutes / 10, 1) * (2 / 3),
+        recordedMax: evidence.recordedMax + (2 / 3),
+      };
+    },
+    { points: 0, recordedMax: 0 },
   );
   const timing = calculateTimingPoints(input.mealTiming);
   const snack = calculateSnackPoints(input.snacks, input.snackRecorded);
-  const values: Array<number | null> = [
-    ...composition,
-    hasWalk ? walk : null,
-    timing,
-    snack,
-  ];
-  if (values.every((value) => value === null)) return null;
+  return {
+    points:
+      composition.reduce((total, evidence) => total + evidence.points, 0) +
+      walk.points +
+      (timing ?? 0) +
+      (snack ?? 0),
+    recordedMax:
+      composition.reduce((total, evidence) => total + evidence.recordedMax, 0) +
+      walk.recordedMax +
+      (timing === null ? 0 : 2) +
+      (snack === null ? 0 : 1),
+  };
+}
+
+export function calculateFoodPoints(input: DailyLogInput): number | null {
+  const evidence = foodEvidence(input);
+  if (evidence.recordedMax === 0) return null;
   return clamp(
-    round(values.reduce<number>((total, value) => total + (value ?? 0), 0)),
+    round(evidence.points),
     0,
     SCORE_MAX.food,
   );
@@ -195,6 +236,75 @@ export function calculateResultPoints(result: ResultInput): number | null {
     0,
     SCORE_MAX.result,
   );
+}
+
+export function calculateEstimatedPerformance(input: DailyLogInput): EstimatedPerformance {
+  const sleep = calculateSleepPoints(
+    input.sleep.pixelWatchScore,
+    input.sleep.recoveryFeeling,
+  );
+  const food = foodEvidence(input);
+  const phone = calculatePhonePoints(input.phone);
+  const candidates: Array<{
+    key: EstimateInput;
+    weight: number;
+    normalizedScore: number | null;
+    evidenceRatio: number;
+  }> = [
+    {
+      key: "sleep",
+      weight: ESTIMATED_PERFORMANCE_WEIGHTS.sleep,
+      normalizedScore: sleep === null ? null : (sleep / SCORE_MAX.sleep) * 100,
+      evidenceRatio: sleep === null ? 0 : 1,
+    },
+    {
+      key: "food",
+      weight: ESTIMATED_PERFORMANCE_WEIGHTS.food,
+      normalizedScore:
+        food.recordedMax === 0 ? null : (food.points / food.recordedMax) * 100,
+      evidenceRatio: clamp(food.recordedMax / SCORE_MAX.food, 0, 1),
+    },
+    {
+      key: "phone",
+      weight: ESTIMATED_PERFORMANCE_WEIGHTS.phone,
+      normalizedScore: phone === null ? null : (phone / SCORE_MAX.phone) * 100,
+      evidenceRatio: phone === null ? 0 : 1,
+    },
+  ];
+  const available = candidates.filter(
+    (candidate): candidate is typeof candidate & { normalizedScore: number } =>
+      candidate.normalizedScore !== null,
+  );
+  const availableWeight = available.reduce((total, candidate) => total + candidate.weight, 0);
+  const score =
+    availableWeight === 0
+      ? null
+      : clamp(
+          round(
+            available.reduce(
+              (total, candidate) => total + candidate.normalizedScore * candidate.weight,
+              0,
+            ) / availableWeight,
+          ),
+          0,
+          100,
+        );
+
+  return {
+    score,
+    coverage: clamp(
+      round(
+        candidates.reduce(
+          (total, candidate) => total + candidate.weight * candidate.evidenceRatio,
+          0,
+        ),
+      ),
+      0,
+      100,
+    ),
+    inputs: available.map((candidate) => candidate.key),
+    version: ESTIMATE_VERSION,
+  };
 }
 
 export function calculateScores(input: DailyLogInput) {

@@ -1,7 +1,11 @@
 import { google, sheets_v4 } from "googleapis";
 import { config } from "@/lib/config";
 import {
+  calculateAchievementPoints,
+  calculateEstimatedPerformance,
+  calculateFocusPoints,
   calculateMealPoints,
+  calculateReflectionPoints,
   calculateScores,
   calculateSnackItemPoints,
   SCORE_VERSION,
@@ -32,6 +36,18 @@ const DAILY_HEADERS = [
   "payload_json",
   "created_at",
   "updated_at",
+  "meal_timing_regular",
+  "dinner_before_bed",
+  "no_long_gap",
+  "entertainment_minutes",
+  "separated_during_work",
+  "limited_morning_or_night_use",
+  "achievement_points",
+  "focus_points",
+  "quality_points",
+  "estimated_performance_score",
+  "estimate_coverage",
+  "estimate_version",
 ];
 
 const MEAL_HEADERS = [
@@ -88,6 +104,13 @@ const USER_KEY = "default";
 
 type SheetName = "daily_logs" | "meal_logs" | "snack_logs" | "ai_insights";
 
+const SHEET_HEADERS: Record<SheetName, string[]> = {
+  daily_logs: DAILY_HEADERS,
+  meal_logs: MEAL_HEADERS,
+  snack_logs: SNACK_HEADERS,
+  ai_insights: AI_HEADERS,
+};
+
 function cell(value: unknown) {
   if (value === null || value === undefined) return "";
   if (typeof value === "boolean") return value ? "true" : "false";
@@ -129,7 +152,7 @@ export class SheetsStorage implements LogStorage {
     await this.ensureTab(tab);
     const response = await this.client.spreadsheets.values.get({
       spreadsheetId: config.spreadsheetId,
-      range: `${tab}!A:Z`,
+      range: `${tab}!A:${columnName(SHEET_HEADERS[tab].length)}`,
       majorDimension: "ROWS",
     });
     return (response.data.values ?? []) as string[][];
@@ -140,9 +163,20 @@ export class SheetsStorage implements LogStorage {
     if (rows.length > 0) {
       const actualHeaders = rows[0] ?? [];
       const missing = headers.filter((header) => !actualHeaders.includes(header));
-      if (missing.length > 0) throw new Error(`Google Sheets headers are not configured for ${tab}.`);
+      if (missing.length > 0) {
+        const nextHeaders = [...actualHeaders, ...missing];
+        await this.ensureColumnCapacity(tab, nextHeaders.length);
+        await this.client.spreadsheets.values.update({
+          spreadsheetId: config.spreadsheetId,
+          range: `${tab}!${columnName(actualHeaders.length + 1)}1:${columnName(nextHeaders.length)}1`,
+          valueInputOption: "RAW",
+          requestBody: { values: [missing] },
+        });
+        rows[0] = nextHeaders;
+      }
       return rows;
     }
+    await this.ensureColumnCapacity(tab, headers.length);
     await this.client.spreadsheets.values.update({
       spreadsheetId: config.spreadsheetId,
       range: `${tab}!A1:${columnName(headers.length)}1`,
@@ -152,26 +186,55 @@ export class SheetsStorage implements LogStorage {
     return [headers];
   }
 
+  private async ensureColumnCapacity(tab: SheetName, requiredColumns: number) {
+    const spreadsheet = await this.client.spreadsheets.get({
+      spreadsheetId: config.spreadsheetId,
+      fields: "sheets.properties(sheetId,title,gridProperties.columnCount)",
+    });
+    const sheet = spreadsheet.data.sheets?.find((candidate) => candidate.properties?.title === tab);
+    const sheetId = sheet?.properties?.sheetId;
+    const columnCount = sheet?.properties?.gridProperties?.columnCount ?? 0;
+    if (sheetId === undefined) throw new Error(`Google Sheets tab is not configured for ${tab}.`);
+    if (columnCount >= requiredColumns) return;
+    await this.client.spreadsheets.batchUpdate({
+      spreadsheetId: config.spreadsheetId,
+      requestBody: {
+        requests: [{
+          appendDimension: {
+            sheetId,
+            dimension: "COLUMNS",
+            length: requiredColumns - columnCount,
+          },
+        }],
+      },
+    });
+  }
+
   private async upsertRow(tab: SheetName, headers: string[], keyHeader: string, keyValue: string, row: string[]) {
     const rows = await this.ensureHeaders(tab, headers);
     const actualHeaders = rows[0] ?? headers;
+    const rowByHeader = Object.fromEntries(headers.map((header, index) => [header, row[index] ?? ""]));
     const keyIndex = actualHeaders.indexOf(keyHeader);
     const rowIndex = rows.findIndex((candidate, index) => index > 0 && candidate[keyIndex] === keyValue);
+    const existingRow = rowIndex >= 1 ? rows[rowIndex] ?? [] : [];
+    const alignedRow = actualHeaders.map((header, index) =>
+      Object.hasOwn(rowByHeader, header) ? rowByHeader[header] : existingRow[index] ?? "",
+    );
     if (rowIndex >= 1) {
       const sheetRow = rowIndex + 1;
       await this.client.spreadsheets.values.update({
         spreadsheetId: config.spreadsheetId,
-        range: `${tab}!A${sheetRow}:${columnName(row.length)}${sheetRow}`,
+        range: `${tab}!A${sheetRow}:${columnName(alignedRow.length)}${sheetRow}`,
         valueInputOption: "RAW",
-        requestBody: { values: [row] },
+        requestBody: { values: [alignedRow] },
       });
     } else {
       await this.client.spreadsheets.values.append({
         spreadsheetId: config.spreadsheetId,
-        range: `${tab}!A:${columnName(row.length)}`,
+        range: `${tab}!A:${columnName(alignedRow.length)}`,
         valueInputOption: "RAW",
         insertDataOption: "INSERT_ROWS",
-        requestBody: { values: [row] },
+        requestBody: { values: [alignedRow] },
       });
     }
   }
@@ -273,6 +336,7 @@ export class SheetsStorage implements LogStorage {
 }
 
 function dailyRow(log: DailyLog) {
+  const estimate = calculateEstimatedPerformance(log);
   return [
     log.id,
     USER_KEY,
@@ -295,6 +359,18 @@ function dailyRow(log: DailyLog) {
     JSON.stringify(log),
     log.createdAt,
     log.updatedAt,
+    cell(log.mealTiming.regular),
+    cell(log.mealTiming.dinnerBeforeBed),
+    cell(log.mealTiming.noLongGap),
+    cell(log.phone.entertainmentMinutes),
+    cell(log.phone.separatedDuringWork),
+    cell(log.phone.limitedMorningOrNightUse),
+    cell(calculateAchievementPoints(log.result.confirmedAchievementScore)),
+    cell(calculateFocusPoints(log.result.focusMinutes)),
+    cell(calculateReflectionPoints(log.result.reflectionRating)),
+    cell(estimate.score),
+    cell(estimate.coverage),
+    estimate.version,
   ];
 }
 

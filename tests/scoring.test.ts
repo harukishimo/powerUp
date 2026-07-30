@@ -1,14 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
   calculateAchievementPoints,
+  calculateEstimatedPerformance,
   calculateFocusPoints,
   calculateFoodPoints,
   calculateMealPoints,
   calculatePhonePoints,
   calculateReflectionPoints,
+  calculateSnackItemPoints,
   calculateSnackPoints,
   calculateSleepPoints,
   calculateScores,
+  calculateTimingPoints,
+  ESTIMATE_VERSION,
   SCORE_VERSION,
 } from "@/lib/scoring";
 import type { DailyLogInput, MealInput } from "@/types/domain";
@@ -126,6 +130,64 @@ describe("scoring v2", () => {
     expect(scores.recordingRate).toBe(0);
   });
 
+  it("estimates performance from available condition inputs without changing the actual score", () => {
+    const input = emptyLog();
+    input.sleep = { pixelWatchScore: 66, recoveryFeeling: 2 };
+    input.meals = [{
+      ...blankMeal("breakfast"),
+      eatenAt: "07:20",
+      carbohydrateLevel: "small",
+      proteinLevel: "sufficient",
+      vegetableLevel: "none",
+      portionLevel: "slightly-high",
+      drinkType: "unsweetened",
+      features: ["fried"],
+      walkMinutes: 0,
+      postMealSleepiness: 2,
+    }];
+
+    const estimate = calculateEstimatedPerformance(input);
+
+    expect(estimate).toEqual({
+      score: 57,
+      coverage: 47,
+      inputs: ["sleep", "food"],
+      version: ESTIMATE_VERSION,
+    });
+    expect(calculateScores(input).total).toBeNull();
+  });
+
+  it("reports zero estimate coverage for empty logs and full coverage for complete conditions", () => {
+    expect(calculateEstimatedPerformance(emptyLog())).toEqual({
+      score: null,
+      coverage: 0,
+      inputs: [],
+      version: ESTIMATE_VERSION,
+    });
+
+    const input = emptyLog();
+    input.sleep = { pixelWatchScore: 100, recoveryFeeling: 5 };
+    input.meals = [
+      completeMeal("breakfast"),
+      completeMeal("lunch"),
+      completeMeal("dinner"),
+    ];
+    input.mealTiming = { regular: true, dinnerBeforeBed: true, noLongGap: true };
+    input.snackRecorded = true;
+    input.phone = {
+      entertainmentMinutes: 60,
+      separatedDuringWork: true,
+      limitedMorningOrNightUse: true,
+    };
+
+    expect(calculateEstimatedPerformance(input)).toEqual({
+      score: 100,
+      coverage: 100,
+      inputs: ["sleep", "food", "phone"],
+      version: ESTIMATE_VERSION,
+    });
+  });
+
   it("scores explicit meal behavior without rewarding missing fields", () => {
     expect(calculateMealPoints(completeMeal("breakfast"))).toBe(5);
     expect(calculateMealPoints(blankMeal("breakfast"))).toBeNull();
@@ -146,6 +208,26 @@ describe("scoring v2", () => {
     expect(calculateSnackPoints([], true)).toBe(1);
     expect(calculateSnackPoints([{ id: "snack-1", eatenAt: "22:00", occurred: true, category: "large-or-late", amountLevel: "large", planned: false, beforeBed: true, note: "" }], true)).toBe(0);
     expect(calculateFoodPoints(input)).toBe(20);
+  });
+
+  it("keeps incomplete meal-timing and snack context unscored", () => {
+    expect(calculateTimingPoints({ regular: null, dinnerBeforeBed: null, noLongGap: null })).toBeNull();
+    expect(calculateTimingPoints({ regular: true, dinnerBeforeBed: null, noLongGap: null })).toBeNull();
+    expect(calculateTimingPoints({ regular: true, dinnerBeforeBed: false, noLongGap: true })).toBe(1);
+
+    const snack = {
+      id: "snack-1",
+      eatenAt: "15:00",
+      occurred: true,
+      category: "healthy-small" as const,
+      amountLevel: "small" as const,
+      planned: null,
+      beforeBed: null,
+      note: "",
+    };
+    expect(calculateSnackItemPoints(snack)).toBeNull();
+    expect(calculateSnackItemPoints({ ...snack, beforeBed: false })).toBe(1);
+    expect(calculateSnackItemPoints({ ...snack, beforeBed: true })).toBe(0);
   });
 
   it("requires all digital-attention inputs instead of inventing screen time", () => {
@@ -187,6 +269,7 @@ describe("scoring v2", () => {
   it("highlights the actual latest weekday in the weekly trend", () => {
     const trend = buildWeeklyTrend([], "2026-07-30");
     expect(trend.map((item) => item.label)).toEqual(["金", "土", "日", "月", "火", "水", "木"]);
+    expect(trend.every((item) => item.value === null)).toBe(true);
     expect(trend.filter((item) => item.today)).toHaveLength(1);
     expect(trend[6]?.today).toBe(true);
   });
