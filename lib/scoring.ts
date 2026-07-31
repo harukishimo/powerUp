@@ -24,7 +24,7 @@ export const PERFORMANCE_WEIGHTS = {
   reflection: 15,
 } as const;
 
-export const ESTIMATE_VERSION = "current-condition-v3";
+export const ESTIMATE_VERSION = "current-condition-v4";
 
 export const SLEEP_ALERTNESS_INTERACTION_MAX = 3;
 
@@ -53,8 +53,23 @@ export interface EstimatedPerformance {
   version: typeof ESTIMATE_VERSION;
   asOf: string | null;
   interactionBonus: number;
+  napEffect: NapPerformanceEffect;
   components: Record<EstimateInput, EstimateComponent>;
   reasons: string[];
+}
+
+export type NapEffectPhase =
+  | "invalid"
+  | "inertia"
+  | "transition"
+  | "benefit"
+  | "expired";
+
+export interface NapPerformanceEffect {
+  adjustment: number;
+  durationMinutes: number | null;
+  minutesSinceNap: number | null;
+  phase: NapEffectPhase;
 }
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -258,6 +273,93 @@ function timeToMinutes(value: string | null | undefined): number | null {
   if (!value || !/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) return null;
   const [hours, minutes] = value.split(":").map(Number);
   return hours * 60 + minutes;
+}
+
+export function calculateNapPerformanceEffect(
+  input: DailyLogInput,
+): NapPerformanceEffect {
+  const startedAt = timeToMinutes(input.nap?.startedAt);
+  const endedAt = timeToMinutes(input.nap?.endedAt);
+  const assessment = timeToMinutes(input.performanceContext?.assessmentTime);
+  if (startedAt === null || endedAt === null || assessment === null) {
+    return {
+      adjustment: 0,
+      durationMinutes: null,
+      minutesSinceNap: null,
+      phase: "invalid",
+    };
+  }
+
+  const durationMinutes = endedAt - startedAt;
+  const minutesSinceNap = assessment - endedAt;
+  if (
+    durationMinutes < 10
+    || durationMinutes > 90
+    || minutesSinceNap < 0
+  ) {
+    return {
+      adjustment: 0,
+      durationMinutes,
+      minutesSinceNap,
+      phase: "invalid",
+    };
+  }
+
+  let adjustment = 0;
+  let benefitEndsAt = 0;
+  if (durationMinutes <= 20) {
+    benefitEndsAt = 150;
+    adjustment = minutesSinceNap < 15
+      ? -1
+      : minutesSinceNap < 30
+        ? 0
+        : minutesSinceNap < benefitEndsAt
+          ? 1
+          : 0;
+  } else if (durationMinutes <= 30) {
+    benefitEndsAt = 180;
+    adjustment = minutesSinceNap < 15
+      ? -2
+      : minutesSinceNap < 35
+        ? -1
+        : minutesSinceNap < benefitEndsAt
+          ? 1
+          : 0;
+  } else if (durationMinutes <= 60) {
+    benefitEndsAt = 240;
+    adjustment = minutesSinceNap < 30
+      ? -3
+      : minutesSinceNap < 60
+        ? -1
+        : minutesSinceNap < benefitEndsAt
+          ? 1
+          : 0;
+  } else {
+    benefitEndsAt = 240;
+    adjustment = minutesSinceNap < 30
+      ? -4
+      : minutesSinceNap < 60
+        ? -2
+        : minutesSinceNap < 90
+          ? 0
+          : minutesSinceNap < benefitEndsAt
+            ? 1
+            : 0;
+  }
+
+  return {
+    adjustment,
+    durationMinutes,
+    minutesSinceNap,
+    phase:
+      minutesSinceNap >= benefitEndsAt
+        ? "expired"
+        : adjustment < 0
+          ? "inertia"
+          : adjustment > 0
+            ? "benefit"
+            : "transition",
+  };
 }
 
 /**
@@ -668,11 +770,27 @@ export function calculateEstimatedPerformance(input: DailyLogInput): EstimatedPe
     : null;
   const interactionBonus =
     baseScore === null ? 0 : calculateSleepAlertnessInteractionBonus(input, components);
+  const napEffect = calculateNapPerformanceEffect(input);
   const score =
-    baseScore === null ? null : round(clamp(baseScore + interactionBonus, 0, 100));
+    baseScore === null
+      ? null
+      : round(clamp(baseScore + interactionBonus + napEffect.adjustment, 0, 100));
   if (interactionBonus > 0) {
     reasons.unshift(
       `良好な睡眠・高い覚醒感・起床後時間の一致を実験的に +${interactionBonus}点`,
+    );
+  }
+  if (napEffect.phase === "inertia") {
+    reasons.unshift(
+      `${napEffect.durationMinutes}分の昼寝後${napEffect.minutesSinceNap}分：睡眠慣性を ${napEffect.adjustment}点`,
+    );
+  } else if (napEffect.phase === "benefit") {
+    reasons.unshift(
+      `${napEffect.durationMinutes}分の昼寝後${napEffect.minutesSinceNap}分：注意・覚醒の時間補正 +${napEffect.adjustment}点`,
+    );
+  } else if (napEffect.phase === "transition") {
+    reasons.unshift(
+      `${napEffect.durationMinutes}分の昼寝後${napEffect.minutesSinceNap}分：移行時間のため補正なし`,
     );
   }
 
@@ -690,6 +808,7 @@ export function calculateEstimatedPerformance(input: DailyLogInput): EstimatedPe
     version: ESTIMATE_VERSION,
     asOf: input.performanceContext?.assessmentTime ?? null,
     interactionBonus,
+    napEffect,
     components,
     reasons: [...new Set(reasons)].slice(0, 4),
   };

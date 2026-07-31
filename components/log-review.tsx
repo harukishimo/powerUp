@@ -128,6 +128,7 @@ function LogDetail({ log }: { log: DailyLog }) {
       <div className="detail-comment"><strong>今日の振り返り</strong>{log.result.comment || "コメントは未入力です。"}</div>
       <div className="detail-records">
         <DetailRecord label="睡眠" value={log.sleep.pixelWatchScore === null ? "未記録" : `Pixel Watch ${log.sleep.pixelWatchScore} · 回復感 ${log.sleep.recoveryFeeling ?? "未記録"} / 5`} />
+        <DetailRecord label="昼寝" value={log.nap?.startedAt && log.nap.endedAt ? `${log.nap.startedAt}〜${log.nap.endedAt}` : "なし・未記録"} />
         <DetailRecord label="食事" value={log.meals.map((meal) => `${meal.type === "breakfast" ? "朝食" : meal.type === "lunch" ? "昼食" : "夕食"} ${meal.eatenAt ?? "未記録"}`).join(" / ") || "朝食・昼食・夕食は未記録"} />
         <DetailRecord label="間食" value={!log.snackRecorded ? "未記録" : log.snacks.length === 0 ? "なし" : `${log.snacks.length}件`} />
         <DetailRecord label="スマートフォン" value={log.phone.entertainmentMinutes === null ? "未記録" : `娯楽 ${log.phone.entertainmentMinutes}分 · 作業中 ${log.phone.separatedDuringWork === true ? "分離" : "未分離"}`} />

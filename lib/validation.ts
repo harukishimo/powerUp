@@ -38,6 +38,10 @@ export const DailyLogInputSchema = z.object({
     pixelWatchScore: nullableInt(0, 100),
     recoveryFeeling: nullableInt(1, 5),
   }),
+  nap: z.object({
+    startedAt: nullableTime,
+    endedAt: nullableTime,
+  }).optional(),
   mealTiming: z.object({
     regular: z.boolean().nullable(),
     dinnerBeforeBed: z.boolean().nullable(),

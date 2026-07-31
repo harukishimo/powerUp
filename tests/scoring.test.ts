@@ -6,6 +6,7 @@ import {
   calculateFoodPoints,
   calculateMealPoints,
   calculateMinutesUntilNextCommitment,
+  calculateNapPerformanceEffect,
   calculatePhonePoints,
   calculateReflectionPoints,
   calculateSnackItemPoints,
@@ -300,6 +301,87 @@ describe("scoring v2", () => {
     const capped = calculateEstimatedPerformance(input);
     expect(capped.interactionBonus).toBe(0);
     expect(capped.score).toBeLessThanOrEqual(100);
+  });
+
+  it("applies conservative nap inertia and benefit windows", () => {
+    const input = emptyLog();
+    const effect = (
+      startedAt: string | null,
+      endedAt: string | null,
+      assessmentTime: string | null,
+    ) => {
+      input.nap = { startedAt, endedAt };
+      input.performanceContext = {
+        assessmentTime,
+        wakeTime: null,
+        currentAlertness: null,
+        continuousWorkMinutes: null,
+        nextCommitmentTime: null,
+      };
+      return calculateNapPerformanceEffect(input);
+    };
+
+    expect(effect("12:00", "12:09", "12:09").adjustment).toBe(0);
+    expect(effect("12:00", "12:10", "12:10")).toMatchObject({ adjustment: -1, phase: "inertia" });
+    expect(effect("12:00", "12:20", "14:49")).toMatchObject({ adjustment: 1, phase: "benefit" });
+    expect(effect("12:00", "12:21", "12:21").adjustment).toBe(-2);
+    expect(effect("12:00", "12:30", "13:05").adjustment).toBe(1);
+    expect(effect("12:00", "12:31", "12:31").adjustment).toBe(-3);
+    expect(effect("12:00", "13:00", "14:00").adjustment).toBe(1);
+    expect(effect("12:00", "13:01", "13:01").adjustment).toBe(-4);
+    expect(effect("12:00", "13:30", "17:29").adjustment).toBe(1);
+    expect(effect("12:00", "13:30", "17:30")).toMatchObject({ adjustment: 0, phase: "expired" });
+    expect(effect("12:00", "13:31", "13:31").adjustment).toBe(0);
+    expect(effect(null, "12:20", "13:00").adjustment).toBe(0);
+    expect(effect("13:00", "12:20", "13:00").adjustment).toBe(0);
+    expect(effect("12:00", "12:20", "12:10").adjustment).toBe(0);
+  });
+
+  it("keeps nap adjustments out of the actual performance score", () => {
+    const input = emptyLog();
+    input.result = {
+      achievementText: "重要な成果を完了",
+      confirmedAchievementScore: 5,
+      focusMinutes: 90,
+      reflectionRating: 5,
+      comment: "",
+    };
+    const before = calculateScores(input);
+    input.nap = { startedAt: "12:00", endedAt: "13:01" };
+    input.performanceContext = {
+      assessmentTime: "13:01",
+      wakeTime: null,
+      currentAlertness: null,
+      continuousWorkMinutes: null,
+      nextCommitmentTime: null,
+    };
+
+    expect(calculateNapPerformanceEffect(input).adjustment).toBe(-4);
+    expect(calculateScores(input)).toEqual(before);
+  });
+
+  it("applies the nap adjustment only to the current-condition estimate", () => {
+    const input = emptyLog();
+    input.sleep = { pixelWatchScore: 66, recoveryFeeling: 2 };
+    input.performanceContext = {
+      assessmentTime: "13:00",
+      wakeTime: null,
+      currentAlertness: null,
+      continuousWorkMinutes: null,
+      nextCommitmentTime: null,
+    };
+    const baseline = calculateEstimatedPerformance(input);
+
+    input.nap = { startedAt: "12:00", endedAt: "12:20" };
+    const benefited = calculateEstimatedPerformance(input);
+    expect(benefited.score).toBe((baseline.score ?? 0) + 1);
+    expect(benefited.napEffect).toMatchObject({ adjustment: 1, phase: "benefit" });
+
+    input.nap = { startedAt: "11:59", endedAt: "13:00" };
+    const inertia = calculateEstimatedPerformance(input);
+    expect(inertia.score).toBe((baseline.score ?? 0) - 4);
+    expect(inertia.napEffect).toMatchObject({ adjustment: -4, phase: "inertia" });
+    expect(calculateScores(input).total).toBeNull();
   });
 
   it("prioritizes a recorded post-meal response over meal proxies", () => {

@@ -59,6 +59,9 @@ const DAILY_HEADERS = [
   "minutes_until_next_commitment",
   "estimate_components_json",
   "estimate_reasons_json",
+  "nap_started_at",
+  "nap_ended_at",
+  "nap_adjustment",
 ];
 
 const MEAL_HEADERS = [
@@ -400,8 +403,12 @@ function dailyRow(log: DailyLog) {
         max: SLEEP_ALERTNESS_INTERACTION_MAX,
         experimental: true,
       },
+      napEffect: estimate.napEffect,
     }),
     JSON.stringify(estimate.reasons),
+    cell(log.nap?.startedAt),
+    cell(log.nap?.endedAt),
+    cell(estimate.napEffect.adjustment),
   ];
 }
 

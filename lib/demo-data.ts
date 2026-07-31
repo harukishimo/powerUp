@@ -20,6 +20,7 @@ export function createDemoInput(date: string): DailyLogInput {
   return {
     date,
     sleep: { pixelWatchScore: 82, recoveryFeeling: 4 },
+    nap: { startedAt: "13:15", endedAt: "13:35" },
     mealTiming: { regular: true, dinnerBeforeBed: true, noLongGap: true },
     meals: [
       meal("breakfast", {
@@ -108,6 +109,7 @@ export function createBlankLog(date: string): DailyLog {
   const input: DailyLogInput = {
     date,
     sleep: { pixelWatchScore: null, recoveryFeeling: null },
+    nap: { startedAt: null, endedAt: null },
     mealTiming: { regular: null, dinnerBeforeBed: null, noLongGap: null },
     meals: [],
     snacks: [],

@@ -12,6 +12,11 @@ export interface SleepInput {
   recoveryFeeling: number | null;
 }
 
+export interface NapInput {
+  startedAt: string | null;
+  endedAt: string | null;
+}
+
 export interface MealInput {
   id?: string;
   type: MealType;
@@ -72,6 +77,7 @@ export interface DailyLogInput {
   clientRequestId?: string;
   date: string;
   sleep: SleepInput;
+  nap?: NapInput;
   mealTiming: MealTimingInput;
   meals: MealInput[];
   snacks: SnackInput[];

@@ -8,6 +8,7 @@ import { buildWeeklyTrend } from "@/lib/trend";
 import {
   calculateEstimatedPerformance,
   calculateMealPoints,
+  calculateNapPerformanceEffect,
   calculateScores,
   SCORE_MAX,
   SCORE_VERSION,
@@ -38,6 +39,7 @@ function inputFromLog(log: DailyLog, assessmentTime: string): DailyLogInput {
   return {
     date: log.date,
     sleep: log.sleep,
+    nap: log.nap ?? { startedAt: null, endedAt: null },
     mealTiming: log.mealTiming,
     meals: (["breakfast", "lunch", "dinner"] as MealType[]).map((type) => log.meals.find((meal) => meal.type === type) ?? blankMeal(type)),
     snacks: log.snacks,
@@ -181,7 +183,7 @@ export function PowerUpDashboard({ initialLog, initialSummaries, initialAssessme
         : "現時点のコンディションからの見込みです。";
   const scoreSubline =
     estimate.score !== null
-      ? `${estimate.asOf ?? "時刻未記録"}時点 · カバー率 ${estimate.coverage}% · ${estimateSources}${estimate.interactionBonus > 0 ? ` · 睡眠×覚醒感 +${estimate.interactionBonus}点（実験的）` : ""} · 実績ではありません`
+      ? `${estimate.asOf ?? "時刻未記録"}時点 · カバー率 ${estimate.coverage}% · ${estimateSources}${estimate.interactionBonus > 0 ? ` · 睡眠×覚醒感 +${estimate.interactionBonus}点（実験的）` : ""}${estimate.napEffect.adjustment !== 0 ? ` · 昼寝 ${estimate.napEffect.adjustment > 0 ? "+" : ""}${estimate.napEffect.adjustment}点` : ""} · 実績ではありません`
       : "未入力は0点にせず、中立値へ縮約します";
 
   return (
@@ -223,6 +225,13 @@ function ActivityCard({ log }: { log: DailyLog }) {
           detail: log.sleep.pixelWatchScore === null
             ? `回復感 ${log.sleep.recoveryFeeling} / 5`
             : `Pixel Watch ${log.sleep.pixelWatchScore}`,
+        }]
+      : []),
+    ...(log.nap?.startedAt && log.nap.endedAt
+      ? [{
+          time: log.nap.endedAt,
+          label: "昼寝を記録",
+          detail: `${log.nap.startedAt}〜${log.nap.endedAt}`,
         }]
       : []),
     ...log.meals
@@ -273,6 +282,8 @@ function ActivityCard({ log }: { log: DailyLog }) {
 type EditorProps = { input: DailyLogInput; scores: ReturnType<typeof calculateScores>; aiInsight: DailyLogInput["aiInsight"]; aiLoading: boolean; saving: boolean; message: string; error: string; updateInput: (patch: Partial<DailyLogInput>) => void; updateMeal: (type: MealType, patch: Partial<MealInput>) => void; updateSnack: (index: number, patch: Partial<SnackInput>) => void; askGemini: () => void; adoptAi: () => void; save: () => void };
 
 function Editor({ input, scores, aiInsight, aiLoading, saving, message, error, updateInput, updateMeal, updateSnack, askGemini, adoptAi, save }: EditorProps) {
+  const nap = input.nap ?? { startedAt: null, endedAt: null };
+  const napEffect = calculateNapPerformanceEffect(input);
   const performanceContext = input.performanceContext ?? {
     assessmentTime: null,
     wakeTime: null,
@@ -351,7 +362,16 @@ function Editor({ input, scores, aiInsight, aiLoading, saving, message, error, u
             <ScaleGuide low="1 回復感なし" middle="3 普通" high="5 十分回復" />
           </Field>
         </div>
-        <p className="help-text">睡眠コンディション：{scores.sleep === null ? "未記録" : `${scores.sleep} / ${SCORE_MAX.sleep}`} · パフォーマンス総合点とは分けて記録します。</p>
+        <div className="input-grid two" style={{ marginTop: 12 }}>
+          <Field label="昼寝の開始時刻（任意）">
+            <input type="time" value={nap.startedAt ?? ""} onChange={(event) => updateInput({ nap: { ...nap, startedAt: event.target.value || null } })} />
+          </Field>
+          <Field label="昼寝の終了時刻（任意）">
+            <input type="time" value={nap.endedAt ?? ""} onChange={(event) => updateInput({ nap: { ...nap, endedAt: event.target.value || null } })} />
+          </Field>
+        </div>
+        <p className="help-text">睡眠コンディション：{scores.sleep === null ? "未記録" : `${scores.sleep} / ${SCORE_MAX.sleep}`} · 昼寝は10〜90分だけを現在推定へ弱く反映します。現在の昼寝補正：{napEffect.phase === "invalid" ? "なし・対象外" : `${napEffect.adjustment > 0 ? "+" : ""}${napEffect.adjustment}点（${napEffect.durationMinutes}分の昼寝・終了後${napEffect.minutesSinceNap}分）`}。</p>
+        <p className="help-text">目安は10〜20分の昼寝で終了30〜150分後、21〜30分で35〜180分後、31〜60分で60〜240分後、61〜90分で90〜240分後に+1点です。それ以前は睡眠慣性を最大-4点まで反映します。主観的な回復は「現在の覚醒感」で記録します。</p>
       </div>
 
       <div className="editor-section">
