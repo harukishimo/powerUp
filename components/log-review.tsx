@@ -31,44 +31,54 @@ export function LogReview({
   initialLog: DailyLog;
   configurationWarning?: boolean;
 }) {
-  const [summaries] = useState(initialSummaries);
   const [selectedDate, setSelectedDate] = useState(initialLog.date);
-  const [selectedLog, setSelectedLog] = useState(initialLog);
-  const [cache, setCache] = useState<Record<string, DailyLog>>({ [initialLog.date]: initialLog });
+  const [cache, setCache] = useState<Record<string, DailyLog>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const sortedSummaries = useMemo(() => [...summaries].sort((a, b) => b.date.localeCompare(a.date)), [summaries]);
+  const sortedSummaries = useMemo(
+    () => [...initialSummaries].sort((a, b) => b.date.localeCompare(a.date)),
+    [initialSummaries],
+  );
   const sevenDays = useMemo(() => {
     const byDate = new Map(sortedSummaries.map((summary) => [summary.date, summary]));
     return Array.from({ length: 7 }, (_, index) => {
       const date = shiftDate(initialLog.date, -index);
-      return byDate.get(date) ?? { date, totalScore: null, recordingRate: 0, scores: { sleep: null, food: null, phone: null, result: null }, status: "draft" as const };
+      const summary = byDate.get(date);
+      return summary
+        ? { ...summary, recorded: true }
+        : {
+            date,
+            totalScore: null,
+            recordingRate: 0,
+            scores: { sleep: null, food: null, phone: null, result: null },
+            status: "draft" as const,
+            recorded: false,
+          };
     });
   }, [initialLog.date, sortedSummaries]);
+  const selectedLog =
+    selectedDate === initialLog.date
+      ? initialLog
+      : cache[selectedDate] ?? createBlankLog(selectedDate);
 
   async function selectDate(date: string) {
     if (date === selectedDate) return;
     setSelectedDate(date);
     setError("");
     const cached = cache[date];
-    if (cached) {
-      setSelectedLog(cached);
-      return;
-    }
+    if (cached || date === initialLog.date) return;
     setLoading(true);
     try {
       const response = await fetch(`/api/logs/${date}`, { cache: "no-store" });
       if (response.status === 404) {
         const blank = createBlankLog(date);
         setCache((current) => ({ ...current, [date]: blank }));
-        setSelectedLog(blank);
         setError("この日は未記録です。");
         return;
       }
       const data = await parseApiResponse(response, LogDetailResponseSchema);
       setCache((current) => ({ ...current, [date]: data.log }));
-      setSelectedLog(data.log);
     } catch {
       setError("この日の詳細を取得できませんでした。");
     } finally {
@@ -90,7 +100,9 @@ export function LogReview({
             <button key={summary.date} type="button" role="option" aria-selected={selectedDate === summary.date} className={`day-button ${selectedDate === summary.date ? "selected" : ""}`} onClick={() => selectDate(summary.date)}>
               <span className="day-date">{shortDate(summary.date)}</span>
               <span className="day-label">{dayLabel(summary.date)}</span>
-              <span className={`day-score ${summary.totalScore === null ? "missing-text" : ""}`}>{summary.totalScore ?? "未記録"}</span>
+              <span className={`day-score ${summary.recorded ? "" : "missing-text"}`}>
+                {summary.totalScore ?? (summary.recorded ? "記録あり" : "未記録")}
+              </span>
             </button>
           ))}
         </div>

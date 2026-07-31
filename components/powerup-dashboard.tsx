@@ -68,6 +68,7 @@ function displayScore(value: number | null, max: number) {
 
 export function PowerUpDashboard({ initialLog, initialSummaries, initialAssessmentTime, configurationWarning = false }: { initialLog: DailyLog; initialSummaries: DailyLogSummary[]; initialAssessmentTime: string; configurationWarning?: boolean }) {
   const [input, setInput] = useState<DailyLogInput>(() => inputFromLog(initialLog, initialAssessmentTime));
+  const [currentLog, setCurrentLog] = useState(initialLog);
   const [summaries, setSummaries] = useState(initialSummaries);
   const [aiInsight, setAiInsight] = useState(initialLog.aiInsight ?? null);
   const [aiLoading, setAiLoading] = useState(false);
@@ -114,7 +115,13 @@ export function PowerUpDashboard({ initialLog, initialSummaries, initialAssessme
       const response = await fetch("/api/logs", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...input, aiInsight: aiInsight?.confirmed ? aiInsight : null, clientRequestId }) });
       const data = await parseApiResponse(response, SaveLogResponseSchema);
       pendingRequestId.current = undefined;
-      setInput(inputFromLog(data.log, data.log.performanceContext?.assessmentTime ?? initialAssessmentTime)); setAiInsight(data.log.aiInsight ?? null); setSummaries((current) => [summaryFromLog(data.log), ...current.filter((item) => item.date !== data.log.date)].sort((a, b) => b.date.localeCompare(a.date)));
+      setInput(inputFromLog(data.log, data.log.performanceContext?.assessmentTime ?? initialAssessmentTime));
+      setCurrentLog(data.log);
+      setAiInsight(data.log.aiInsight ?? null);
+      setSummaries((current) => [
+        summaryFromLog(data.log),
+        ...current.filter((item) => item.date !== data.log.date),
+      ].sort((a, b) => b.date.localeCompare(a.date)));
       setMessage("保存しました");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "保存できませんでした。入力は保持されています。");
@@ -195,9 +202,9 @@ export function PowerUpDashboard({ initialLog, initialSummaries, initialAssessme
         <MetricCard icon="↗" tone="result" title="今日の実績パフォーマンス" value={displayScore(scores.result, SCORE_MAX.result)} meta={scores.provisional ? `実績入力カバー率 ${scores.recordingRate}%` : `集中 ${input.result.focusMinutes ?? 0}分`} score={scores.result} max={SCORE_MAX.result} badge={scores.result === null ? null : scores.provisional ? "暫定" : "実績"} />
       </div>
       <div className="section-row"><div><h2>今日のログ</h2><p>入力内容を確認し、最後にまとめて保存できます。</p></div><Link className="section-link" href="/logs">ログを見る →</Link></div>
-      <div className="lower-grid"><ActivityCard log={input} /><section className="card insight-card"><div className="card-heading"><div><h2>次に試すこと</h2><p>小さな実験をひとつだけ</p></div><span className="ai-badge">✦ Gemini AI insight</span></div><p className="insight-copy">{aiInsight ? <>{aiInsight.reason}<br /><em>{aiInsight.nextExperiment}</em></> : <>昨日は昼食後の眠気が強めでした。<br /><em>次回は甘い飲料を無糖のお茶に替えてみましょう。</em></>}</p><button className="insight-action" type="button" onClick={askGemini} disabled={aiLoading}>{aiLoading ? "作成中…" : "Gemini採点案を更新 →"}</button></section></div>
+      <div className="lower-grid"><ActivityCard log={currentLog} /><section className="card insight-card"><div className="card-heading"><div><h2>次に試すこと</h2><p>小さな実験をひとつだけ</p></div><span className="ai-badge">✦ Gemini AI insight</span></div><p className="insight-copy">{aiInsight ? <>{aiInsight.reason}<br /><em>{aiInsight.nextExperiment}</em></> : <>Geminiの提案はまだありません。<br /><em>入力後に「Gemini採点案を更新」を押してください。</em></>}</p><button className="insight-action" type="button" onClick={askGemini} disabled={aiLoading}>{aiLoading ? "作成中…" : "Gemini採点案を更新 →"}</button></section></div>
       <Editor input={input} scores={scores} aiInsight={aiInsight} aiLoading={aiLoading} saving={saving} message={message} error={error} updateInput={updateInput} updateMeal={updateMeal} updateSnack={updateSnack} askGemini={askGemini} adoptAi={adoptAi} save={save} />
-      <LogReview summaries={summaries} initialLog={initialLog} />
+      <LogReview summaries={summaries} initialLog={currentLog} />
     </main>
   );
 }
@@ -206,13 +213,61 @@ function MetricCard({ icon, tone, title, value, meta, score, max, badge = null }
   return <section className="card metric-card"><div className="metric-top"><span className={`metric-icon ${tone}`}>{icon}</span><span className="metric-score"><strong>{value.split(" /")[0]}</strong>{value.includes("/") ? ` / ${max}` : ""}{badge ? <span className="metric-badge">{badge}</span> : null}</span></div><h2 className="metric-title">{title}</h2><p className={`metric-meta ${score === null ? "missing-text" : ""}`}>{meta}</p><div className="metric-bar"><span className={tone} style={{ width: `${score === null ? 0 : Math.min(100, (score / max) * 100)}%` }} /></div></section>;
 }
 
-function ActivityCard({ log }: { log: DailyLogInput }) {
+function ActivityCard({ log }: { log: DailyLog }) {
+  const savedAt = log.timeline.at(-1)?.time ?? "—";
   const events = [
-    { time: log.sleep.pixelWatchScore === null ? "—" : "08:05", label: "睡眠を記録", detail: log.sleep.pixelWatchScore === null ? "未記録" : `Pixel Watch ${log.sleep.pixelWatchScore}` },
-    ...log.meals.filter((meal) => meal.eatenAt).slice(0, 2).map((meal) => ({ time: meal.eatenAt!, label: `${mealNames[meal.type]}を記録`, detail: meal.postMealSleepiness ? `眠気 ${meal.postMealSleepiness} / 5` : "食事バランスを記録" })),
-    { time: log.result.focusMinutes === null ? "—" : "18:10", label: "集中作業を記録", detail: log.result.focusMinutes === null ? "未記録" : `${log.result.focusMinutes}分` },
+    ...(log.sleep.pixelWatchScore !== null || log.sleep.recoveryFeeling !== null
+      ? [{
+          time: savedAt,
+          label: "睡眠を記録",
+          detail: log.sleep.pixelWatchScore === null
+            ? `回復感 ${log.sleep.recoveryFeeling} / 5`
+            : `Pixel Watch ${log.sleep.pixelWatchScore}`,
+        }]
+      : []),
+    ...log.meals
+      .filter((meal) => meal.eatenAt)
+      .map((meal) => ({
+        time: meal.eatenAt!,
+        label: `${mealNames[meal.type]}を記録`,
+        detail: meal.postMealSleepiness
+          ? `眠気 ${meal.postMealSleepiness} / 5`
+          : "食事バランスを記録",
+      })),
+    ...(log.snackRecorded
+      ? [{
+          time: log.snacks.at(-1)?.eatenAt ?? savedAt,
+          label: "間食を記録",
+          detail: log.snacks.length === 0 ? "間食なし" : `${log.snacks.length}件`,
+        }]
+      : []),
+    ...(log.phone.entertainmentMinutes !== null
+      || log.phone.separatedDuringWork !== null
+      || log.phone.limitedMorningOrNightUse !== null
+      ? [{
+          time: savedAt,
+          label: "デジタル環境を記録",
+          detail: log.phone.entertainmentMinutes === null
+            ? "通知・利用境界を記録"
+            : `娯楽 ${log.phone.entertainmentMinutes}分`,
+        }]
+      : []),
+    ...(log.result.achievementText
+      || log.result.focusMinutes !== null
+      || log.result.reflectionRating !== null
+      ? [{
+          time: savedAt,
+          label: "実際の成果を記録",
+          detail: log.result.focusMinutes === null
+            ? log.result.achievementText || "成果の品質を記録"
+            : `集中 ${log.result.focusMinutes}分`,
+        }]
+      : []),
   ];
-  return <section className="card activity-card"><div className="card-heading"><div><h2>今日のアクティビティ</h2><p>記録した内容がここに並びます。</p></div><span className="date-chip">{log.date}</span></div><div className="activity-list">{events.map((event, index) => <div className="activity-item" key={`${event.time}-${index}`}><span className="activity-time">{event.time}</span><span className="activity-marker" /><div className="activity-copy"><strong>{event.label}</strong><span>{event.detail}</span></div></div>)}</div></section>;
+  const visibleEvents = events.length
+    ? events
+    : [{ time: "—", label: "保存済みの記録はありません", detail: "入力後にログを保存してください" }];
+  return <section className="card activity-card"><div className="card-heading"><div><h2>今日のアクティビティ</h2><p>最後に保存した内容がここに並びます。</p></div><span className="date-chip">{log.date}</span></div><div className="activity-list">{visibleEvents.map((event, index) => <div className="activity-item" key={`${event.label}-${event.time}-${index}`}><span className="activity-time">{event.time}</span><span className="activity-marker" /><div className="activity-copy"><strong>{event.label}</strong><span>{event.detail}</span></div></div>)}</div></section>;
 }
 
 type EditorProps = { input: DailyLogInput; scores: ReturnType<typeof calculateScores>; aiInsight: DailyLogInput["aiInsight"]; aiLoading: boolean; saving: boolean; message: string; error: string; updateInput: (patch: Partial<DailyLogInput>) => void; updateMeal: (type: MealType, patch: Partial<MealInput>) => void; updateSnack: (index: number, patch: Partial<SnackInput>) => void; askGemini: () => void; adoptAi: () => void; save: () => void };

@@ -458,6 +458,10 @@ describe("scoring v2", () => {
     const second = await storage.upsert({ ...input, result: { ...input.result, comment: "再送" } }, scores, "request-1");
     expect(second).toEqual(first);
     expect((await storage.list(input.date, input.date)).filter((item) => item.date === input.date)).toHaveLength(1);
+
+    const third = await storage.upsert(input, scores, "request-2");
+    expect(third.timeline).toHaveLength(2);
+    expect(third.timeline.at(-1)?.detail).toBe("request-2");
   });
 
   it("validates dates and AI fallback output", () => {

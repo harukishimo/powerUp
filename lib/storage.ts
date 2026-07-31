@@ -75,7 +75,15 @@ export class MemoryStorage implements LogStorage {
       scores,
       createdAt: normalizedExisting?.createdAt ?? now,
       updatedAt: now,
-      timeline: normalizedExisting?.timeline ?? [{ time: formatJstTime(now) ?? "—", label: "日次ログを保存", detail: clientRequestId, timeZone: JAPAN_TIME_ZONE }],
+      timeline: [
+        ...(normalizedExisting?.timeline ?? []),
+        {
+          time: formatJstTime(now) ?? "—",
+          label: "日次ログを保存",
+          detail: clientRequestId,
+          timeZone: JAPAN_TIME_ZONE,
+        },
+      ].slice(-12),
     };
     this.logs.set(input.date, log);
     this.requestResults.set(clientRequestId, log);
