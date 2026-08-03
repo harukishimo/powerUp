@@ -6,6 +6,7 @@ export type MealFeature = "normal" | "noodle" | "fried" | "eating-out" | "double
 export type ScoreSource = "rule" | "ai" | "user";
 export type LogStatus = "draft" | "proposed" | "confirmed";
 export type Confidence = "low" | "medium" | "high";
+export type HabitColor = "violet" | "mint" | "orange" | "rose" | "blue";
 
 export interface SleepInput {
   pixelWatchScore: number | null;
@@ -134,4 +135,26 @@ export interface DailyLogSummary {
   recordingRate: number;
   scores: Pick<ScoreBreakdown, "sleep" | "food" | "phone" | "result">;
   status: LogStatus;
+}
+
+export interface HabitInput {
+  name: string;
+  note: string;
+  color: HabitColor;
+  /** 0=日曜日 ... 6=土曜日 */
+  targetDays: number[];
+  active: boolean;
+}
+
+export interface Habit extends HabitInput {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface HabitLog {
+  habitId: string;
+  date: string;
+  completed: boolean;
+  updatedAt: string;
 }

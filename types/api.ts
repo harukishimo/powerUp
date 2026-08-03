@@ -1,4 +1,4 @@
-import type { AiInsight, DailyLog, DailyLogInput, DailyLogSummary } from "@/types/domain";
+import type { AiInsight, DailyLog, DailyLogInput, DailyLogSummary, Habit, HabitLog } from "@/types/domain";
 
 export interface LogsListResponse {
   logs: DailyLogSummary[];
@@ -33,4 +33,21 @@ export interface AiScoreResponse {
   provider: "gemini" | "fallback";
   model: string | null;
   requestId: string;
+}
+
+export interface HabitsListResponse {
+  habits: Habit[];
+}
+
+export interface HabitResponse {
+  habit: Habit;
+}
+
+export interface HabitLogsResponse {
+  logs: HabitLog[];
+  range: { from: string; to: string };
+}
+
+export interface HabitLogResponse {
+  log: HabitLog;
 }

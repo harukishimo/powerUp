@@ -5,6 +5,7 @@ import { SCORE_MAX } from "@/lib/scoring";
 const nullableInt = (min: number, max: number) => z.number().int().min(min).max(max).nullable();
 const dateString = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isValidDateString, "有効な日付を入力してください。");
 const nullableTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable();
+const habitColor = z.enum(["violet", "mint", "orange", "rose", "blue"]);
 
 export const MealInputSchema = z.object({
   id: z.string().min(1).max(100).optional(),
@@ -163,3 +164,36 @@ export const AiScoreResponseSchema = z.object({
   requestId: z.string().min(1).max(120),
 });
 export const ErrorResponseSchema = z.object({ error: z.string().max(240), requestId: z.string().max(120).optional(), retryable: z.boolean().optional() });
+
+export const HabitInputSchema = z.object({
+  name: z.string().trim().min(1, "継続する事柄を入力してください。").max(60),
+  note: z.string().trim().max(240),
+  color: habitColor,
+  targetDays: z.array(z.number().int().min(0).max(6)).min(1, "曜日を1つ以上選択してください。").max(7)
+    .transform((days) => [...new Set(days)].sort((a, b) => a - b)),
+  active: z.boolean(),
+});
+
+export const HabitSchema = HabitInputSchema.extend({
+  id: z.string().min(1).max(120),
+  createdAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true }),
+});
+
+export const HabitLogInputSchema = z.object({
+  habitId: z.string().min(1).max(120),
+  date: dateString,
+  completed: z.boolean(),
+});
+
+export const HabitLogSchema = HabitLogInputSchema.extend({
+  updatedAt: z.string().datetime({ offset: true }),
+});
+
+export const HabitsListResponseSchema = z.object({ habits: z.array(HabitSchema) });
+export const HabitResponseSchema = z.object({ habit: HabitSchema });
+export const HabitLogsResponseSchema = z.object({
+  logs: z.array(HabitLogSchema),
+  range: z.object({ from: dateString, to: dateString }),
+});
+export const HabitLogResponseSchema = z.object({ log: HabitLogSchema });

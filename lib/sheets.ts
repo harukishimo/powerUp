@@ -13,9 +13,9 @@ import {
   SCORE_VERSION,
   SLEEP_ALERTNESS_INTERACTION_MAX,
 } from "@/lib/scoring";
-import { DailyLogInputSchema } from "@/lib/validation";
+import { DailyLogInputSchema, HabitInputSchema } from "@/lib/validation";
 import type { LogStorage } from "@/lib/storage-types";
-import type { AiInsight, DailyLog, DailyLogInput, DailyLogSummary, MealInput, ScoreBreakdown, SnackInput } from "@/types/domain";
+import type { AiInsight, DailyLog, DailyLogInput, DailyLogSummary, Habit, HabitInput, HabitLog, MealInput, ScoreBreakdown, SnackInput } from "@/types/domain";
 
 const DAILY_HEADERS = [
   "log_id",
@@ -114,15 +114,38 @@ const AI_HEADERS = [
   "created_at",
 ];
 
+const HABIT_HEADERS = [
+  "habit_id",
+  "user_key",
+  "habit_name",
+  "note",
+  "color",
+  "target_days",
+  "active",
+  "created_at",
+  "updated_at",
+];
+
+const HABIT_LOG_HEADERS = [
+  "log_key",
+  "user_key",
+  "habit_id",
+  "log_date",
+  "completed",
+  "updated_at",
+];
+
 const USER_KEY = "default";
 
-type SheetName = "daily_logs" | "meal_logs" | "snack_logs" | "ai_insights";
+type SheetName = "daily_logs" | "meal_logs" | "snack_logs" | "ai_insights" | "habit_master" | "habit_logs";
 
 const SHEET_HEADERS: Record<SheetName, string[]> = {
   daily_logs: DAILY_HEADERS,
   meal_logs: MEAL_HEADERS,
   snack_logs: SNACK_HEADERS,
   ai_insights: AI_HEADERS,
+  habit_master: HABIT_HEADERS,
+  habit_logs: HABIT_LOG_HEADERS,
 };
 
 function cell(value: unknown) {
@@ -347,6 +370,82 @@ export class SheetsStorage implements LogStorage {
     ]);
     return updated;
   }
+
+  async listHabits(includeInactive = false): Promise<Habit[]> {
+    const rows = await this.ensureHeaders("habit_master", HABIT_HEADERS);
+    if (rows.length < 2) return [];
+    const headers = rows[0] ?? HABIT_HEADERS;
+    return rows
+      .slice(1)
+      .map((row) => rowToObject(headers, row))
+      .filter((row) => row.user_key === USER_KEY && (includeInactive || booleanValue(row.active)))
+      .map((row) => ({
+        id: row.habit_id,
+        name: row.habit_name,
+        note: row.note,
+        color: habitColor(row.color),
+        targetDays: targetDays(row.target_days),
+        active: booleanValue(row.active),
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      }))
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+
+  async upsertHabit(input: HabitInput, habitId?: string): Promise<Habit> {
+    const parsed = HabitInputSchema.parse(input);
+    const existing = habitId ? (await this.listHabits(true)).find((habit) => habit.id === habitId) : undefined;
+    const now = nowJstIso();
+    const habit: Habit = {
+      ...parsed,
+      id: existing?.id ?? habitId ?? `habit-${crypto.randomUUID()}`,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    await this.upsertRow("habit_master", HABIT_HEADERS, "habit_id", habit.id, [
+      habit.id,
+      USER_KEY,
+      habit.name,
+      habit.note,
+      habit.color,
+      JSON.stringify(habit.targetDays),
+      cell(habit.active),
+      habit.createdAt,
+      habit.updatedAt,
+    ]);
+    return habit;
+  }
+
+  async listHabitLogs(from: string, to: string): Promise<HabitLog[]> {
+    const rows = await this.ensureHeaders("habit_logs", HABIT_LOG_HEADERS);
+    if (rows.length < 2) return [];
+    const headers = rows[0] ?? HABIT_LOG_HEADERS;
+    return rows
+      .slice(1)
+      .map((row) => rowToObject(headers, row))
+      .filter((row) => row.user_key === USER_KEY && row.log_date >= from && row.log_date <= to)
+      .map((row) => ({
+        habitId: row.habit_id,
+        date: row.log_date,
+        completed: booleanValue(row.completed),
+        updatedAt: row.updated_at,
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date) || a.habitId.localeCompare(b.habitId));
+  }
+
+  async upsertHabitLog(habitId: string, date: string, completed: boolean): Promise<HabitLog> {
+    const log: HabitLog = { habitId, date, completed, updatedAt: nowJstIso() };
+    const key = `${habitId}:${date}`;
+    await this.upsertRow("habit_logs", HABIT_LOG_HEADERS, "log_key", key, [
+      key,
+      USER_KEY,
+      habitId,
+      date,
+      cell(completed),
+      log.updatedAt,
+    ]);
+    return log;
+  }
 }
 
 function dailyRow(log: DailyLog) {
@@ -476,6 +575,29 @@ function numberOrNull(value: string | undefined) {
   if (!value) return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
+}
+
+function booleanValue(value: string | undefined) {
+  return value === "true";
+}
+
+function targetDays(value: string | undefined) {
+  if (!value) return [0, 1, 2, 3, 4, 5, 6];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (Array.isArray(parsed)) {
+      const days = parsed.filter((day): day is number => Number.isInteger(day) && day >= 0 && day <= 6);
+      if (days.length > 0) return [...new Set(days)].sort((a, b) => a - b);
+    }
+  } catch {
+    // 旧データがカンマ区切りの場合は下の互換処理へ進む。
+  }
+  const days = value.split(",").map(Number).filter((day) => Number.isInteger(day) && day >= 0 && day <= 6);
+  return days.length > 0 ? [...new Set(days)].sort((a, b) => a - b) : [0, 1, 2, 3, 4, 5, 6];
+}
+
+function habitColor(value: string | undefined): Habit["color"] {
+  return value === "mint" || value === "orange" || value === "rose" || value === "blue" ? value : "violet";
 }
 
 function columnName(length: number) {

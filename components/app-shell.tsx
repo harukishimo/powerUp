@@ -1,10 +1,11 @@
 import Link from "next/link";
 
-type NavKey = "today" | "logs" | "analysis" | "settings";
+type NavKey = "today" | "logs" | "habits" | "analysis" | "settings";
 
 const navItems: Array<{ key: NavKey; label: string; icon: string; href: string }> = [
   { key: "today", label: "今日", icon: "⌂", href: "/" },
   { key: "logs", label: "ログ", icon: "▣", href: "/logs" },
+  { key: "habits", label: "継続", icon: "◎", href: "/habits" },
   { key: "analysis", label: "分析", icon: "⌁", href: "/#trend" },
   { key: "settings", label: "設定", icon: "⚙", href: "/#settings" },
 ];
@@ -38,9 +39,7 @@ export function AppShell({ children, active }: { children: React.ReactNode; acti
         <Link className="mobile-log-link" href="/logs">ログを見る →</Link>
       </div>
       <div className="mobile-nav" aria-label="モバイルナビゲーション">
-        {navItems.slice(0, 2).map((item) => <Link key={item.key} href={item.href} className={active === item.key ? "active" : ""}><span>{item.icon}</span>{item.label}</Link>)}
-        <Link href="/#trend"><span>⌁</span>分析</Link>
-        <Link href="/#settings"><span>⚙</span>設定</Link>
+        {navItems.map((item) => <Link key={item.key} href={item.href} className={active === item.key ? "active" : ""}><span>{item.icon}</span>{item.label}</Link>)}
       </div>
       {children}
     </div>

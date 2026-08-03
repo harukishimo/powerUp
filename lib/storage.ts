@@ -4,7 +4,7 @@ import { formatJstTime, getTodayJst, JAPAN_TIME_ZONE, normalizeLogTimestamps, no
 import { calculateScores, SCORE_VERSION } from "@/lib/scoring";
 import { SheetsStorage } from "@/lib/sheets";
 import type { LogStorage } from "@/lib/storage-types";
-import type { AiInsight, DailyLog, DailyLogInput, DailyLogSummary, ScoreBreakdown } from "@/types/domain";
+import type { AiInsight, DailyLog, DailyLogInput, DailyLogSummary, Habit, HabitInput, HabitLog, ScoreBreakdown } from "@/types/domain";
 
 const memory = globalThis as typeof globalThis & {
   __powerUpMemoryStorage?: MemoryStorage;
@@ -39,6 +39,8 @@ function refreshLog(log: DailyLog): DailyLog {
 export class MemoryStorage implements LogStorage {
   private readonly logs = new Map<string, DailyLog>();
   private readonly requestResults = new Map<string, DailyLog>();
+  private readonly habits = new Map<string, Habit>();
+  private readonly habitLogs = new Map<string, HabitLog>();
 
   constructor() {
     if (this.logs.size === 0) {
@@ -98,6 +100,37 @@ export class MemoryStorage implements LogStorage {
     const result = { ...normalizedExisting, ...input, status: "confirmed" as const, updatedAt: nowJstIso() };
     this.logs.set(date, result);
     return result;
+  }
+
+  async listHabits(includeInactive = false) {
+    return [...this.habits.values()]
+      .filter((habit) => includeInactive || habit.active)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+
+  async upsertHabit(input: HabitInput, habitId?: string) {
+    const existing = habitId ? this.habits.get(habitId) : undefined;
+    const now = nowJstIso();
+    const habit: Habit = {
+      ...input,
+      id: existing?.id ?? habitId ?? `habit-${crypto.randomUUID()}`,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.habits.set(habit.id, habit);
+    return habit;
+  }
+
+  async listHabitLogs(from: string, to: string) {
+    return [...this.habitLogs.values()]
+      .filter((log) => log.date >= from && log.date <= to)
+      .sort((a, b) => a.date.localeCompare(b.date) || a.habitId.localeCompare(b.habitId));
+  }
+
+  async upsertHabitLog(habitId: string, date: string, completed: boolean) {
+    const log: HabitLog = { habitId, date, completed, updatedAt: nowJstIso() };
+    this.habitLogs.set(`${habitId}:${date}`, log);
+    return log;
   }
 }
 

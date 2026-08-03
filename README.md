@@ -39,24 +39,26 @@ APP_ACCESS_TOKEN=
 
 ## Google Spreadsheetの準備
 
-接続先は[powerUp用Spreadsheet](https://docs.google.com/spreadsheets/d/1CqXYXrcsblxe2I7NBlesRSBq6DP4be1Bx8e1lyZWu50/edit)です。既存の`Tasks`タブは変更せず、アプリ用に次の4タブを追加しています。
+接続先は[powerUp用Spreadsheet](https://docs.google.com/spreadsheets/d/1CqXYXrcsblxe2I7NBlesRSBq6DP4be1Bx8e1lyZWu50/edit)です。既存の`Tasks`タブは変更せず、アプリ用に次の6タブを使用します。
 
 1. Google Cloudプロジェクトを作成する
 2. Google Sheets APIを有効化する
 3. サービスアカウントを作成する
 4. 対象Spreadsheetをサービスアカウントのメールアドレスへ共有する
-5. Spreadsheetに次の4タブがあることを確認する
+5. 初回アクセス時に次の6タブが自動作成されることを確認する
 
 ```text
 daily_logs
 meal_logs
 snack_logs
 ai_insights
+habit_master
+habit_logs
 ```
 
 列定義は[`docs/技術要件書.md`](./docs/技術要件書.md)の「データモデルとGoogle Spreadsheet」を参照してください。`daily_logs`には画面の詳細状態を復元するための`payload_json`列に加え、推定値・評価時刻・6要素の内訳を実績と分離して保存します。
 
-アプリ用4タブが既に存在して列が旧構成の場合、不足したアプリ管理列は既存列を動かさず末尾へ自動追加されます。`Tasks`タブやアプリ管理外の列は変更しません。
+アプリ用タブが存在しない場合は初回利用時に自動作成され、列が旧構成の場合は不足したアプリ管理列が既存列を動かさず末尾へ自動追加されます。`Tasks`タブやアプリ管理外の列は変更しません。
 
 サービスアカウントの秘密鍵はJSONファイルとしてコミットせず、VercelのEnvironment Variablesへ登録してください。改行はVercel上で`\\n`として保持し、アプリ側で復元します。
 
@@ -64,6 +66,8 @@ ai_insights
 
 - `/`：今日のコンディション、日次入力、Gemini提案
 - `/logs`：直近7日間のデイリーログ振り返り
+- `/habits`：継続項目の月間カレンダー、日別達成チェック、連続回数
+- `/habits/manage`：継続項目の追加・編集・休止・再開
 - `/access`：`APP_ACCESS_TOKEN`設定時のアクセスゲート
 - `/api/health`：デプロイ後の設定状態確認（秘密情報そのものは返しません）
 
@@ -86,6 +90,8 @@ ai_insights
 - 保存ボタンでのみ`POST /api/logs`
 - 日付変更でのみ`GET /api/logs/[date]`
 - Geminiボタンでのみ`POST /api/ai/score`
+- 継続項目の追加・編集時に`POST /api/habits`または`PATCH /api/habits/[id]`
+- カレンダーの達成チェック時に`POST /api/habit-logs`
 - Geminiの失敗時も、決定的な採点と保存は継続する
 
 詳細は[`docs/API発火仕様書.md`](./docs/API発火仕様書.md)を参照してください。
