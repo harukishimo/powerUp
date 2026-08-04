@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { parseApiResponse } from "@/lib/client-api";
 import { formatJapaneseDate } from "@/lib/date";
+import { pickHabitCelebration, type HabitCelebration } from "@/lib/habit-celebrations";
 import {
   buildMonthCalendar,
   calculateHabitStreak,
@@ -15,6 +16,7 @@ import { HabitLogResponseSchema, HabitLogsResponseSchema } from "@/lib/validatio
 import type { Habit, HabitLog } from "@/types/domain";
 
 const WEEKDAYS = ["月", "火", "水", "木", "金", "土", "日"];
+const CELEBRATION_PARTICLES = Array.from({ length: 12 }, (_, index) => index);
 
 function monthTitle(month: string) {
   const [year, monthNumber] = month.split("-");
@@ -23,6 +25,19 @@ function monthTitle(month: string) {
 
 function logKey(habitId: string, date: string) {
   return `${habitId}:${date}`;
+}
+
+function CelebrationEffect({ animation }: { animation: HabitCelebration["animation"] }) {
+  if (animation === "confetti") {
+    return <div className="habit-celebration-effect celebration-confetti" aria-hidden="true">{CELEBRATION_PARTICLES.map((particle) => <i key={particle} />)}</div>;
+  }
+  if (animation === "sparkles") {
+    return <div className="habit-celebration-effect celebration-sparkles" aria-hidden="true">{CELEBRATION_PARTICLES.slice(0, 8).map((particle) => <i key={particle}>✦</i>)}</div>;
+  }
+  if (animation === "rings") {
+    return <div className="habit-celebration-effect celebration-rings" aria-hidden="true">{CELEBRATION_PARTICLES.slice(0, 3).map((particle) => <i key={particle} />)}</div>;
+  }
+  return <div className="habit-celebration-effect celebration-rising-stars" aria-hidden="true">{CELEBRATION_PARTICLES.slice(0, 9).map((particle) => <i key={particle}>{particle % 2 === 0 ? "★" : "●"}</i>)}</div>;
 }
 
 export function HabitCalendar({
@@ -42,6 +57,17 @@ export function HabitCalendar({
   const [loading, setLoading] = useState(false);
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [celebration, setCelebration] = useState<{ id: number; habitName: string; definition: HabitCelebration } | null>(null);
+  const celebrationId = useRef(0);
+
+  useEffect(() => {
+    if (!celebration) return;
+    const currentId = celebration.id;
+    const timeout = window.setTimeout(() => {
+      setCelebration((current) => current?.id === currentId ? null : current);
+    }, 2600);
+    return () => window.clearTimeout(timeout);
+  }, [celebration]);
 
   const completedKeys = useMemo(
     () => new Set(logs.filter((log) => log.completed).map((log) => logKey(log.habitId, log.date))),
@@ -91,6 +117,14 @@ export function HabitCalendar({
       });
       const data = await parseApiResponse(response, HabitLogResponseSchema);
       setLogs((current) => [...current.filter((log) => logKey(log.habitId, log.date) !== key), data.log]);
+      if (data.log.completed) {
+        celebrationId.current += 1;
+        setCelebration({
+          id: celebrationId.current,
+          habitName: habit.name,
+          definition: pickHabitCelebration(),
+        });
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "達成記録を保存できませんでした。");
     } finally {
@@ -111,6 +145,24 @@ export function HabitCalendar({
 
   return (
     <>
+      {celebration ? (
+        <div
+          className={`habit-celebration habit-celebration-${celebration.definition.animation}`}
+          key={celebration.id}
+          role="status"
+          aria-live="polite"
+        >
+          <CelebrationEffect animation={celebration.definition.animation} />
+          <div className="habit-celebration-toast">
+            <span className="habit-celebration-icon" aria-hidden="true">{celebration.definition.icon}</span>
+            <div>
+              <small>TASK COMPLETE</small>
+              <strong>{celebration.definition.message}</strong>
+              <p>{celebration.habitName}</p>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <section className="habit-summary-grid" aria-label="今月の継続状況">
         <article className="card habit-summary-card">
           <span>今月の達成率</span>
