@@ -1,11 +1,12 @@
 import Link from "next/link";
 
-type NavKey = "today" | "logs" | "habits" | "analysis" | "settings";
+type NavKey = "today" | "logs" | "habits" | "focus" | "analysis" | "settings";
 
 const navItems: Array<{ key: NavKey; label: string; icon: string; href: string }> = [
   { key: "today", label: "今日", icon: "⌂", href: "/" },
   { key: "logs", label: "ログ", icon: "▣", href: "/logs" },
   { key: "habits", label: "継続", icon: "◎", href: "/habits" },
+  { key: "focus", label: "集中", icon: "◉", href: "/focus" },
   { key: "analysis", label: "分析", icon: "⌁", href: "/#trend" },
   { key: "settings", label: "設定", icon: "⚙", href: "/#settings" },
 ];

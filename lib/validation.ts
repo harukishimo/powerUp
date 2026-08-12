@@ -197,3 +197,49 @@ export const HabitLogsResponseSchema = z.object({
   range: z.object({ from: dateString, to: dateString }),
 });
 export const HabitLogResponseSchema = z.object({ log: HabitLogSchema });
+
+const FocusUrgeTriggerSchema = z.enum(["unclear", "difficult", "tedious", "tired", "sleepy", "after-task", "task-switch", "anxious", "other"]);
+const FocusUrgeOutcomeSchema = z.enum(["noticed-not-opened", "closed-returned", "watched"]);
+
+export const FocusDailyLogInputSchema = z.object({
+  date: dateString,
+  firstTask: z.string().trim().max(160),
+  completedActionIds: z.array(z.string().min(1).max(80)).max(20).transform((ids) => [...new Set(ids)]),
+  environmentCheckIds: z.array(z.string().min(1).max(80)).max(20).transform((ids) => [...new Set(ids)]),
+  metrics: z.object({
+    aimlessOpenCount: nullableInt(0, 500),
+    workYoutubeMinutes: nullableInt(0, 1440),
+    shortsMinutes: nullableInt(0, 1440),
+    workStartDelayMinutes: nullableInt(0, 1440),
+    recognizedUrges: nullableInt(0, 500),
+    returnedToWorkCount: nullableInt(0, 500),
+  }),
+  urgeEvents: z.array(z.object({
+    id: z.string().min(1).max(120),
+    time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+    trigger: FocusUrgeTriggerSchema,
+    note: z.string().trim().max(240),
+    outcome: FocusUrgeOutcomeSchema,
+    watchedMinutes: nullableInt(0, 1440),
+    createdAt: z.string().datetime({ offset: true }),
+  })).max(100),
+  purposeEntries: z.array(z.object({
+    id: z.string().min(1).max(120),
+    time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+    purpose: z.string().trim().min(1).max(160),
+    createdAt: z.string().datetime({ offset: true }),
+  })).max(100),
+  reflection: z.string().trim().max(500),
+});
+
+export const FocusDailyLogSchema = FocusDailyLogInputSchema.extend({
+  id: z.string().min(1).max(120),
+  createdAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true }),
+});
+
+export const FocusLogsResponseSchema = z.object({
+  logs: z.array(FocusDailyLogSchema),
+  range: z.object({ from: dateString, to: dateString }),
+});
+export const FocusLogResponseSchema = z.object({ log: FocusDailyLogSchema });

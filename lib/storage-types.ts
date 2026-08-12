@@ -1,4 +1,4 @@
-import type { AiInsight, DailyLog, DailyLogInput, DailyLogSummary, Habit, HabitInput, HabitLog, ScoreBreakdown } from "@/types/domain";
+import type { AiInsight, DailyLog, DailyLogInput, DailyLogSummary, FocusDailyLog, FocusDailyLogInput, Habit, HabitInput, HabitLog, ScoreBreakdown } from "@/types/domain";
 
 export interface LogStorage {
   list(from: string, to: string): Promise<DailyLogSummary[]>;
@@ -9,4 +9,6 @@ export interface LogStorage {
   upsertHabit(input: HabitInput, habitId?: string): Promise<Habit>;
   listHabitLogs(from: string, to: string): Promise<HabitLog[]>;
   upsertHabitLog(habitId: string, date: string, completed: boolean): Promise<HabitLog>;
+  listFocusLogs(from: string, to: string): Promise<FocusDailyLog[]>;
+  upsertFocusLog(input: FocusDailyLogInput): Promise<FocusDailyLog>;
 }

@@ -7,6 +7,8 @@ export type ScoreSource = "rule" | "ai" | "user";
 export type LogStatus = "draft" | "proposed" | "confirmed";
 export type Confidence = "low" | "medium" | "high";
 export type HabitColor = "violet" | "mint" | "orange" | "rose" | "blue";
+export type FocusUrgeTrigger = "unclear" | "difficult" | "tedious" | "tired" | "sleepy" | "after-task" | "task-switch" | "anxious" | "other";
+export type FocusUrgeOutcome = "noticed-not-opened" | "closed-returned" | "watched";
 
 export interface SleepInput {
   pixelWatchScore: number | null;
@@ -156,5 +158,48 @@ export interface HabitLog {
   habitId: string;
   date: string;
   completed: boolean;
+  updatedAt: string;
+}
+
+export interface FocusMetrics {
+  aimlessOpenCount: number | null;
+  workYoutubeMinutes: number | null;
+  shortsMinutes: number | null;
+  workStartDelayMinutes: number | null;
+  recognizedUrges: number | null;
+  returnedToWorkCount: number | null;
+}
+
+export interface FocusUrgeEvent {
+  id: string;
+  time: string;
+  trigger: FocusUrgeTrigger;
+  note: string;
+  outcome: FocusUrgeOutcome;
+  watchedMinutes: number | null;
+  createdAt: string;
+}
+
+export interface FocusPurposeEntry {
+  id: string;
+  time: string;
+  purpose: string;
+  createdAt: string;
+}
+
+export interface FocusDailyLogInput {
+  date: string;
+  firstTask: string;
+  completedActionIds: string[];
+  environmentCheckIds: string[];
+  metrics: FocusMetrics;
+  urgeEvents: FocusUrgeEvent[];
+  purposeEntries: FocusPurposeEntry[];
+  reflection: string;
+}
+
+export interface FocusDailyLog extends FocusDailyLogInput {
+  id: string;
+  createdAt: string;
   updatedAt: string;
 }

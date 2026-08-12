@@ -4,7 +4,7 @@ import { formatJstTime, getTodayJst, JAPAN_TIME_ZONE, normalizeLogTimestamps, no
 import { calculateScores, SCORE_VERSION } from "@/lib/scoring";
 import { SheetsStorage } from "@/lib/sheets";
 import type { LogStorage } from "@/lib/storage-types";
-import type { AiInsight, DailyLog, DailyLogInput, DailyLogSummary, Habit, HabitInput, HabitLog, ScoreBreakdown } from "@/types/domain";
+import type { AiInsight, DailyLog, DailyLogInput, DailyLogSummary, FocusDailyLog, FocusDailyLogInput, Habit, HabitInput, HabitLog, ScoreBreakdown } from "@/types/domain";
 
 const memory = globalThis as typeof globalThis & {
   __powerUpMemoryStorage?: MemoryStorage;
@@ -41,6 +41,7 @@ export class MemoryStorage implements LogStorage {
   private readonly requestResults = new Map<string, DailyLog>();
   private readonly habits = new Map<string, Habit>();
   private readonly habitLogs = new Map<string, HabitLog>();
+  private readonly focusLogs = new Map<string, FocusDailyLog>();
 
   constructor() {
     if (this.logs.size === 0) {
@@ -130,6 +131,25 @@ export class MemoryStorage implements LogStorage {
   async upsertHabitLog(habitId: string, date: string, completed: boolean) {
     const log: HabitLog = { habitId, date, completed, updatedAt: nowJstIso() };
     this.habitLogs.set(`${habitId}:${date}`, log);
+    return log;
+  }
+
+  async listFocusLogs(from: string, to: string) {
+    return [...this.focusLogs.values()]
+      .filter((log) => log.date >= from && log.date <= to)
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  async upsertFocusLog(input: FocusDailyLogInput) {
+    const existing = this.focusLogs.get(input.date);
+    const now = nowJstIso();
+    const log: FocusDailyLog = {
+      ...input,
+      id: existing?.id ?? `focus-${input.date}`,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.focusLogs.set(input.date, log);
     return log;
   }
 }

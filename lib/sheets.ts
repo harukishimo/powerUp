@@ -13,9 +13,9 @@ import {
   SCORE_VERSION,
   SLEEP_ALERTNESS_INTERACTION_MAX,
 } from "@/lib/scoring";
-import { DailyLogInputSchema, HabitInputSchema } from "@/lib/validation";
+import { DailyLogInputSchema, FocusDailyLogInputSchema, HabitInputSchema } from "@/lib/validation";
 import type { LogStorage } from "@/lib/storage-types";
-import type { AiInsight, DailyLog, DailyLogInput, DailyLogSummary, Habit, HabitInput, HabitLog, MealInput, ScoreBreakdown, SnackInput } from "@/types/domain";
+import type { AiInsight, DailyLog, DailyLogInput, DailyLogSummary, FocusDailyLog, FocusDailyLogInput, Habit, HabitInput, HabitLog, MealInput, ScoreBreakdown, SnackInput } from "@/types/domain";
 
 const DAILY_HEADERS = [
   "log_id",
@@ -135,9 +135,28 @@ const HABIT_LOG_HEADERS = [
   "updated_at",
 ];
 
+const FOCUS_LOG_HEADERS = [
+  "log_id",
+  "user_key",
+  "log_date",
+  "aimless_open_count",
+  "work_youtube_minutes",
+  "shorts_minutes",
+  "work_start_delay_minutes",
+  "recognized_urges",
+  "returned_to_work_count",
+  "actions_completed",
+  "environment_completion",
+  "urge_event_count",
+  "purpose_count",
+  "payload_json",
+  "created_at",
+  "updated_at",
+];
+
 const USER_KEY = "default";
 
-type SheetName = "daily_logs" | "meal_logs" | "snack_logs" | "ai_insights" | "habit_master" | "habit_logs";
+type SheetName = "daily_logs" | "meal_logs" | "snack_logs" | "ai_insights" | "habit_master" | "habit_logs" | "focus_logs";
 
 const SHEET_HEADERS: Record<SheetName, string[]> = {
   daily_logs: DAILY_HEADERS,
@@ -146,6 +165,7 @@ const SHEET_HEADERS: Record<SheetName, string[]> = {
   ai_insights: AI_HEADERS,
   habit_master: HABIT_HEADERS,
   habit_logs: HABIT_LOG_HEADERS,
+  focus_logs: FOCUS_LOG_HEADERS,
 };
 
 function cell(value: unknown) {
@@ -446,6 +466,33 @@ export class SheetsStorage implements LogStorage {
     ]);
     return log;
   }
+
+  async listFocusLogs(from: string, to: string): Promise<FocusDailyLog[]> {
+    const rows = await this.ensureHeaders("focus_logs", FOCUS_LOG_HEADERS);
+    if (rows.length < 2) return [];
+    const headers = rows[0] ?? FOCUS_LOG_HEADERS;
+    return rows
+      .slice(1)
+      .map((row) => rowToObject(headers, row))
+      .filter((row) => row.user_key === USER_KEY && row.log_date >= from && row.log_date <= to)
+      .map((row) => parseFocusPayload(row.payload_json))
+      .filter((log): log is FocusDailyLog => Boolean(log))
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  async upsertFocusLog(input: FocusDailyLogInput): Promise<FocusDailyLog> {
+    const parsed = FocusDailyLogInputSchema.parse(input);
+    const existing = (await this.listFocusLogs(parsed.date, parsed.date))[0];
+    const now = nowJstIso();
+    const log: FocusDailyLog = {
+      ...parsed,
+      id: existing?.id ?? `focus-${parsed.date}`,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    await this.upsertRow("focus_logs", FOCUS_LOG_HEADERS, "log_date", parsed.date, focusLogRow(log));
+    return log;
+  }
 }
 
 function dailyRow(log: DailyLog) {
@@ -551,10 +598,45 @@ function snackRow(date: string, snack: SnackInput, snackId: string) {
   ];
 }
 
+function focusLogRow(log: FocusDailyLog) {
+  return [
+    log.id,
+    USER_KEY,
+    log.date,
+    cell(log.metrics.aimlessOpenCount),
+    cell(log.metrics.workYoutubeMinutes),
+    cell(log.metrics.shortsMinutes),
+    cell(log.metrics.workStartDelayMinutes),
+    cell(log.metrics.recognizedUrges),
+    cell(log.metrics.returnedToWorkCount),
+    cell(log.completedActionIds.length),
+    cell(log.environmentCheckIds.length),
+    cell(log.urgeEvents.length),
+    cell(log.purposeEntries.length),
+    JSON.stringify(log),
+    log.createdAt,
+    log.updatedAt,
+  ];
+}
+
 function parsePayload(value: string | undefined): DailyLog | null {
   if (!value) return null;
   try {
     return JSON.parse(value) as DailyLog;
+  } catch {
+    return null;
+  }
+}
+
+function parseFocusPayload(value: string | undefined): FocusDailyLog | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    const result = FocusDailyLogInputSchema.safeParse(parsed);
+    if (!result.success || !parsed || typeof parsed !== "object") return null;
+    const stored = parsed as Partial<FocusDailyLog>;
+    if (!stored.id || !stored.createdAt || !stored.updatedAt) return null;
+    return { ...result.data, id: stored.id, createdAt: stored.createdAt, updatedAt: stored.updatedAt };
   } catch {
     return null;
   }
