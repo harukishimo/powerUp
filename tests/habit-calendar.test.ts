@@ -56,6 +56,8 @@ describe("HabitCalendar", () => {
     expect(container.textContent).toContain("100%");
     expect(container.querySelector(".habit-check.completed")).not.toBeNull();
     expect(container.querySelector(".habit-streak-item")?.textContent).toContain("1");
+    expect(container.querySelector(".habit-inline-streak")?.textContent).toContain("1回連続");
+    expect(container.querySelector(".habit-inline-streak")?.textContent).toContain("最長 1回");
   });
 
   it("celebrates only after a task is successfully completed", async () => {
@@ -99,6 +101,7 @@ describe("HabitCalendar", () => {
     expect(celebration).not.toBeNull();
     expect(celebration?.textContent).toContain("ナイス達成！未来の自分に一歩前進です。");
     expect(celebration?.textContent).toContain(habit.name);
+    expect(container.querySelector(".habit-inline-streak")?.textContent).toContain("1回連続");
   });
 
   it("does not celebrate when a completed task is unchecked", async () => {

@@ -83,6 +83,7 @@ export function HabitCalendar({
   );
   const monthRate = scheduledCount > 0 ? Math.round((completedCount / scheduledCount) * 100) : 0;
   const streaks = habits.map((habit) => ({ habit, ...calculateHabitStreak(habit, logs, today) }));
+  const streakByHabitId = new Map(streaks.map((streak) => [streak.habit.id, streak]));
   const strongestStreak = streaks.reduce((max, item) => Math.max(max, item.current), 0);
 
   async function changeMonth(nextMonth: string) {
@@ -249,6 +250,7 @@ export function HabitCalendar({
                 {selectedHabits.map((habit) => {
                   const key = logKey(habit.id, selectedDate);
                   const completed = completedKeys.has(key);
+                  const streak = streakByHabitId.get(habit.id) ?? { current: 0, longest: 0 };
                   return (
                     <button
                       className={`habit-check ${completed ? "completed" : ""}`}
@@ -261,6 +263,10 @@ export function HabitCalendar({
                         <strong>{habit.name}</strong>
                         <small>{habit.note || `${formatTargetDays(habit.targetDays)}に実行`}</small>
                       </span>
+                      <span className={`habit-inline-streak ${streak.current > 0 ? "active" : ""}`}>
+                        <strong>{streak.current}<small>回連続</small></strong>
+                        <small>最長 {streak.longest}回</small>
+                      </span>
                     </button>
                   );
                 })}
@@ -272,7 +278,7 @@ export function HabitCalendar({
             <div className="habit-section-heading">
               <div>
                 <p className="eyebrow">STREAKS</p>
-                <h2>継続記録</h2>
+                <h2>各タスクの連続記録</h2>
               </div>
             </div>
             <div className="habit-streak-list">
